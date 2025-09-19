@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USDT Trading Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-card: rgba(255, 255, 255, 0.05);
+            --bg-card-hover: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
+            --accent-success: #10b981;
+            --accent-danger: #ef4444;
+            --accent-warning: #f59e0b;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.2) 0%, transparent 50%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: clamp(16px, 4vw, 24px);
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: clamp(24px, 6vw, 40px);
+            position: relative;
+            padding: 0 16px;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: clamp(150px, 40vw, 200px);
+            height: clamp(150px, 40vw, 200px);
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            z-index: -1;
+        }
+
+        .header h1 {
+            font-size: clamp(1.75rem, 6vw, 3.5rem);
+            font-weight: 700;
+            margin-bottom: clamp(8px, 2vw, 12px);
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+        }
+
+        .header p {
+            font-size: clamp(0.875rem, 3vw, 1.125rem);
+            color: var(--text-secondary);
+            font-weight: 400;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+            gap: clamp(16px, 4vw, 24px);
+            margin-bottom: clamp(24px, 6vw, 32px);
+        }
+
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: clamp(16px, 4vw, 20px);
+            padding: clamp(20px, 5vw, 28px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            min-height: fit-content;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            background: var(--bg-card-hover);
+            box-shadow: var(--shadow-xl);
+        }
+
+        .card h3 {
+            color: var(--text-primary);
+            margin-bottom: clamp(16px, 4vw, 20px);
+            font-size: clamp(1.1rem, 3vw, 1.25rem);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: clamp(6px, 2vw, 8px);
+            flex-wrap: wrap;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: clamp(12px, 3vw, 16px);
+            padding: clamp(8px, 2vw, 12px) 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s ease;
+            gap: 12px;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .metric:hover {
+            background: rgba(255, 255, 255, 0.02);
+            margin: clamp(12px, 3vw, 16px) clamp(-8px, -2vw, -12px) clamp(12px, 3vw, 16px) clamp(-8px, -2vw, -12px);
+            padding: clamp(8px, 2vw, 12px);
+            border-radius: 8px;
+        }
+
+        .metric-label {
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: clamp(0.75rem, 2.5vw, 0.875rem);
+            flex: 1;
+            min-width: 0;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            font-size: clamp(0.95rem, 3vw, 1.125rem);
+            color: var(--text-primary);
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .positive {
+            color: var(--accent-success);
+        }
+
+        .negative {
+            color: var(--accent-danger);
+        }
+
+        .chart-container {
+            grid-column: 1 / -1;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: clamp(16px, 4vw, 20px);
+            padding: clamp(16px, 5vw, 32px);
+            margin-bottom: clamp(16px, 4vw, 24px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        }
+
+        .chart-container h3 {
+            color: var(--text-primary);
+            margin-bottom: clamp(16px, 4vw, 24px);
+            font-size: clamp(1.1rem, 3.5vw, 1.375rem);
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .chart-container canvas {
+            max-width: 100%;
+            height: auto !important;
+        }
+
+        /* Chart responsive height */
+        .chart-wrapper {
+            position: relative;
+            height: clamp(250px, 50vw, 400px);
+            width: 100%;
+        }
+
+        @media (max-width: 480px) {
+            .chart-wrapper {
+                height: clamp(200px, 60vw, 300px);
+            }
+        }
+
+        .predictions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+            gap: clamp(12px, 3vw, 16px);
+            margin-top: clamp(16px, 4vw, 24px);
+        }
+
+        .prediction-card {
+            background: linear-gradient(135deg,
+                    rgba(59, 130, 246, 0.1) 0%,
+                    rgba(139, 92, 246, 0.1) 50%,
+                    rgba(236, 72, 153, 0.1) 100%);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: clamp(12px, 3vw, 16px);
+            padding: clamp(16px, 4vw, 24px);
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            min-height: fit-content;
+        }
+
+        .prediction-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+        }
+
+        .prediction-card:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .prediction-card h4 {
+            margin-bottom: clamp(8px, 2vw, 12px);
+            font-size: clamp(0.75rem, 2vw, 0.875rem);
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            line-height: 1.2;
+        }
+
+        .prediction-value {
+            font-size: clamp(1.25rem, 4vw, 1.75rem);
+            font-weight: 700;
+            margin-bottom: clamp(4px, 1vw, 8px);
+            color: var(--text-primary);
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .prediction-growth {
+            font-size: clamp(0.75rem, 2vw, 0.875rem);
+            color: var(--accent-success);
+            font-weight: 500;
+            line-height: 1.2;
+        }
+
+        .multi-year-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+            gap: clamp(16px, 4vw, 24px);
+            margin-top: clamp(16px, 4vw, 20px);
+        }
+
+        .year-card {
+            background: linear-gradient(135deg,
+                    rgba(59, 130, 246, 0.08) 0%,
+                    rgba(139, 92, 246, 0.08) 50%,
+                    rgba(236, 72, 153, 0.08) 100%);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: clamp(12px, 3vw, 16px);
+            padding: clamp(20px, 5vw, 24px);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .year-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+        }
+
+        .year-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .year-card h4 {
+            font-size: clamp(1.1rem, 3vw, 1.25rem);
+            font-weight: 700;
+            margin-bottom: clamp(16px, 4vw, 20px);
+            color: var(--text-primary);
+            text-align: center;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .year-scenarios {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: clamp(8px, 2vw, 12px);
+            margin-bottom: clamp(16px, 4vw, 20px);
+        }
+
+        .scenario-item {
+            text-align: center;
+            padding: clamp(8px, 2vw, 12px);
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s ease;
+        }
+
+        .scenario-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .scenario-label {
+            font-size: clamp(0.7rem, 2vw, 0.75rem);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: clamp(4px, 1vw, 6px);
+            font-weight: 500;
+        }
+
+        .scenario-value {
+            font-size: clamp(0.9rem, 2.5vw, 1rem);
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+
+        .year-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(8px, 2vw, 12px);
+            padding-top: clamp(12px, 3vw, 16px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .detail-item {
+            text-align: center;
+        }
+
+        .detail-label {
+            font-size: clamp(0.7rem, 2vw, 0.75rem);
+            color: var(--text-muted);
+            margin-bottom: clamp(2px, 1vw, 4px);
+            font-weight: 400;
+        }
+
+        .detail-value {
+            font-size: clamp(0.8rem, 2vw, 0.875rem);
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .detail-value.negative {
+            color: var(--accent-danger);
+        }
+
+        @media (max-width: 768px) {
+            .multi-year-container {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .year-scenarios {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .scenario-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                text-align: left;
+                padding: 12px;
+            }
+
+            .scenario-label {
+                margin-bottom: 0;
+            }
+
+            .year-details {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .detail-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                text-align: left;
+                padding: 8px 0;
+            }
+
+            .detail-label {
+                margin-bottom: 0;
+            }
+        }
+
+        .loading {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 1.125rem;
+            margin: 60px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .loading::before {
+            content: '';
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-top: 3px solid var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 24px 0;
+            text-align: center;
+            backdrop-filter: blur(20px);
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            color: white;
+            border: none;
+            padding: clamp(12px, 3vw, 14px) clamp(20px, 5vw, 28px);
+            border-radius: 50px;
+            font-size: clamp(0.75rem, 2.5vw, 0.875rem);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin: clamp(24px, 6vw, 32px) auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(6px, 2vw, 8px);
+            box-shadow: var(--shadow-md);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            min-height: 44px;
+            white-space: nowrap;
+        }
+
+        .refresh-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .refresh-btn:active {
+            transform: translateY(0);
+        }
+
+        .refresh-btn svg {
+            width: clamp(14px, 3vw, 16px);
+            height: clamp(14px, 3vw, 16px);
+            flex-shrink: 0;
+        }
+
+        .last-updated {
+            text-align: center;
+            color: var(--text-muted);
+            margin-top: clamp(16px, 4vw, 24px);
+            font-size: clamp(0.75rem, 2vw, 0.875rem);
+            font-weight: 400;
+            padding: 0 16px;
+            line-height: 1.4;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent-primary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-secondary);
+        }
+
+        /* Tablet Portrait */
+        @media (max-width: 768px) {
+            .container {
+                padding: clamp(12px, 3vw, 20px);
+            }
+
+            .dashboard {
+                grid-template-columns: 1fr;
+                gap: clamp(12px, 3vw, 20px);
+            }
+
+            .card {
+                padding: clamp(16px, 4vw, 24px);
+            }
+
+            .chart-container {
+                padding: clamp(12px, 4vw, 24px);
+            }
+
+            .predictions-grid {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 12px;
+            }
+
+            .metric {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+                padding: 8px 0;
+            }
+
+            .metric-value {
+                text-align: left;
+                font-size: 1rem;
+            }
+
+            .metric-label {
+                font-size: 0.8rem;
+            }
+        }
+
+        /* Mobile Landscape */
+        @media (max-width: 640px) {
+            .header {
+                margin-bottom: 20px;
+            }
+
+            .dashboard {
+                gap: 16px;
+            }
+
+            .predictions-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .prediction-card {
+                padding: 16px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                text-align: left;
+            }
+
+            .prediction-card h4 {
+                margin-bottom: 0;
+                flex: 1;
+            }
+
+            .prediction-info {
+                text-align: right;
+            }
+
+            .prediction-value {
+                font-size: 1.25rem;
+                margin-bottom: 2px;
+            }
+
+            .prediction-growth {
+                font-size: 0.75rem;
+            }
+        }
+
+        /* Mobile Portrait */
+        @media (max-width: 480px) {
+            .container {
+                padding: 12px;
+            }
+
+            .header h1 {
+                font-size: clamp(1.5rem, 8vw, 2.5rem);
+                line-height: 1.1;
+            }
+
+            .header p {
+                font-size: 0.9rem;
+            }
+
+            .card {
+                padding: 16px;
+                border-radius: 16px;
+            }
+
+            .card h3 {
+                font-size: 1rem;
+                margin-bottom: 12px;
+            }
+
+            .chart-container {
+                padding: 16px;
+                border-radius: 16px;
+            }
+
+            .chart-container h3 {
+                font-size: 1rem;
+                margin-bottom: 16px;
+                line-height: 1.3;
+            }
+
+            .prediction-card {
+                padding: 12px 16px;
+                border-radius: 12px;
+            }
+
+            .refresh-btn {
+                padding: 12px 20px;
+                font-size: 0.75rem;
+                margin: 20px auto;
+            }
+
+            .loading {
+                margin: 40px 0;
+                font-size: 1rem;
+            }
+
+            .error {
+                padding: 16px;
+                margin: 16px 0;
+                font-size: 0.875rem;
+            }
+        }
+
+        /* Small Mobile */
+        @media (max-width: 360px) {
+            .container {
+                padding: 8px;
+            }
+
+            .dashboard {
+                gap: 12px;
+            }
+
+            .card {
+                padding: 12px;
+            }
+
+            .chart-container {
+                padding: 12px;
+            }
+
+            .metric {
+                padding: 6px 0;
+            }
+
+            .prediction-card {
+                padding: 10px 12px;
+            }
+
+            .prediction-value {
+                font-size: 1.1rem;
+            }
+
+            .refresh-btn {
+                padding: 10px 16px;
+                min-height: 40px;
+            }
+        }
+
+        /* Landscape orientation adjustments */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .header {
+                margin-bottom: 16px;
+            }
+
+            .header h1 {
+                font-size: 1.75rem;
+            }
+
+            .header p {
+                font-size: 0.875rem;
+            }
+
+            .dashboard {
+                gap: 16px;
+                margin-bottom: 20px;
+            }
+
+            .card {
+                padding: 16px;
+            }
+
+            .chart-container {
+                padding: 16px;
+            }
+        }
+
+        /* Custom animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .card {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .card:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+
+        .card:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .card:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>USDT Trading Dashboard</h1>
+            <p>Real-time portfolio tracking and growth predictions</p>
+        </div>
+
+        <div id="loading" class="loading">
+            Loading your trading data...
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="dashboard" class="dashboard" style="display: none;">
+            <!-- Current Performance -->
+            <div class="card">
+                <h3>📈 Current Performance</h3>
+                <div class="metric">
+                    <span class="metric-label">Current Balance</span>
+                    <span class="metric-value" id="currentBalance">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Starting Amount</span>
+                    <span class="metric-value" id="startingAmount">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Total Growth</span>
+                    <span class="metric-value positive" id="totalGrowth">+$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Growth Percentage</span>
+                    <span class="metric-value positive" id="growthPercentage">+0.00%</span>
+                </div>
+            </div>
+
+            <!-- Trading Statistics -->
+            <div class="card">
+                <h3>📊 Trading Statistics</h3>
+                <div class="metric">
+                    <span class="metric-label">Active Days</span>
+                    <span class="metric-value" id="activeDays">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Avg Daily Growth</span>
+                    <span class="metric-value positive" id="avgDailyGrowth">+0.00%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Total Volume</span>
+                    <span class="metric-value" id="totalVolume">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Best Day</span>
+                    <span class="metric-value positive" id="bestDay">+0.00%</span>
+                </div>
+            </div>
+
+            <!-- Year-End Predictions -->
+            <div class="card">
+                <h3>🔮 Year-End Predictions (After 10% Trader Fee)</h3>
+                <div class="metric">
+                    <span class="metric-label">Business Days Left</span>
+                    <span class="metric-value" id="businessDaysLeft">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Trader Fee (10% of profit)</span>
+                    <span class="metric-value negative" id="traderFee">-$0</span>
+                </div>
+                <div class="predictions-grid">
+                    <div class="prediction-card">
+                        <h4>Conservative</h4>
+                        <div class="prediction-info">
+                            <div class="prediction-value" id="conservativePrediction">$0</div>
+                            <div class="prediction-growth" id="conservativeGrowth">+0%</div>
+                        </div>
+                    </div>
+                    <div class="prediction-card">
+                        <h4>Current Trend</h4>
+                        <div class="prediction-info">
+                            <div class="prediction-value" id="currentTrendPrediction">$0</div>
+                            <div class="prediction-growth" id="currentTrendGrowth">+0%</div>
+                        </div>
+                    </div>
+                    <div class="prediction-card">
+                        <h4>Optimistic</h4>
+                        <div class="prediction-info">
+                            <div class="prediction-value" id="optimisticPrediction">$0</div>
+                            <div class="prediction-growth" id="optimisticGrowth">+0%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Multi-Year Predictions -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <h3>🚀 Multi-Year Growth Projections (After Annual 10% Trader Fees)</h3>
+                <div id="multiYearPredictions" class="multi-year-container">
+                    <!-- Multi-year cards will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div id="chartsContainer" style="display: none;">
+            <div class="chart-container">
+                <h3>📈 Balance Growth Over Time & Year-End Projections</h3>
+                <div class="chart-wrapper">
+                    <canvas id="balanceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>📊 Daily Growth Percentage</h3>
+                <div class="chart-wrapper">
+                    <canvas id="growthChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <button class="refresh-btn" onclick="loadData()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh Data
+        </button>
+
+        <div class="last-updated" id="lastUpdated"></div>
+
+        <div
+            style="text-align: center; color: var(--text-muted); font-size: 0.75rem; margin-top: 16px; padding: 0 20px;">
+            💡 All predictions include 10% trader fee deduction from total profits at year-end
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            ETHERSCAN_V2_API_URL: 'https://api.etherscan.io/v2/api',
+            WALLET_ADDRESS: '0xe74a5C39231e2C065fA53dE164E31548cAA45078',
+            API_KEY: 'UQZ2NTK6G26RIJTA34B9MIA74ZZ5BD8G7U'
+        };
+
+        let balanceChart, growthChart;
+
+        // Utility functions
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2
+            }).format(amount);
+        }
+
+        function formatPercentage(percent) {
+            const sign = percent >= 0 ? '+' : '';
+            return `${sign}${percent.toFixed(2)}%`;
+        }
+
+        function getBusinessDays(startDate, endDate) {
+            let count = 0;
+            const current = new Date(startDate);
+
+            while (current <= endDate) {
+                const dayOfWeek = current.getDay();
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                    count++;
+                }
+                current.setDate(current.getDate() + 1);
+            }
+
+            return count;
+        }
+
+        // API call function
+        async function fetchTransactions() {
+            const url = `${CONFIG.ETHERSCAN_V2_API_URL}?chainid=56&module=account&action=tokentx&address=${CONFIG.WALLET_ADDRESS}&page=1&offset=1000&sort=desc&apikey=${CONFIG.API_KEY}`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.status === '1' && data.result) {
+                    // Filter for USDT transactions
+                    return data.result.filter(tx =>
+                        tx.tokenSymbol && (
+                            tx.tokenSymbol.toUpperCase().includes('USDT') ||
+                            tx.tokenSymbol.toUpperCase().includes('USD') ||
+                            (tx.tokenName && tx.tokenName.toUpperCase().includes('TETHER'))
+                        )
+                    );
+                }
+                throw new Error(data.message || 'Failed to fetch transactions');
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+
+        // Data processing function
+        function processTransactions(transactions) {
+            if (!transactions || transactions.length === 0) {
+                throw new Error('No USDT transactions found');
+            }
+
+            // Sort by timestamp (oldest first)
+            const sortedTxs = transactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
+
+            const dailyData = new Map();
+            let runningBalance = 0;
+            let totalReceived = 0;
+            const dailyGrowthRates = [];
+
+            // Process each transaction
+            sortedTxs.forEach(tx => {
+                const isReceived = tx.to.toLowerCase() === CONFIG.WALLET_ADDRESS.toLowerCase();
+                const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
+                const date = new Date(parseInt(tx.timeStamp) * 1000);
+                const dateKey = date.toISOString().split('T')[0];
+
+                if (isReceived) {
+                    runningBalance += amount;
+                    totalReceived += amount;
+                } else {
+                    runningBalance -= amount;
+                }
+
+                if (isReceived && amount > 100) { // Only track significant deposits
+                    dailyData.set(dateKey, {
+                        balance: amount,
+                        date: date,
+                        amount: amount
+                    });
+                }
+            });
+
+            // Convert to array and calculate growth rates
+            const dailyArray = Array.from(dailyData.entries())
+                .map(([dateKey, data]) => ({ dateKey, ...data }))
+                .sort((a, b) => new Date(a.dateKey) - new Date(b.dateKey));
+
+            let previousAmount = 0;
+            dailyArray.forEach((day, index) => {
+                if (index === 0) {
+                    previousAmount = day.amount;
+                    day.growthRate = 0;
+                } else {
+                    const growthRate = previousAmount > 0 ? ((day.amount - previousAmount) / previousAmount) * 100 : 0;
+                    day.growthRate = growthRate;
+                    dailyGrowthRates.push(growthRate);
+                    previousAmount = day.amount;
+                }
+            });
+
+            const startBalance = dailyArray[0]?.amount || 0;
+            const endBalance = dailyArray[dailyArray.length - 1]?.amount || 0;
+            const totalGrowth = endBalance - startBalance;
+            const totalGrowthPercent = startBalance > 0 ? (totalGrowth / startBalance) * 100 : 0;
+            const avgDailyGrowth = dailyGrowthRates.length > 0 ?
+                dailyGrowthRates.reduce((sum, rate) => sum + rate, 0) / dailyGrowthRates.length : 0;
+            const bestDay = Math.max(...dailyGrowthRates, 0);
+
+            return {
+                dailyData: dailyArray,
+                startBalance,
+                endBalance,
+                totalGrowth,
+                totalGrowthPercent,
+                avgDailyGrowth,
+                bestDay,
+                totalReceived,
+                activeDays: dailyArray.length
+            };
+        }
+
+        // Calculate business days in a full year
+        function getBusinessDaysInYear(year) {
+            const startOfYear = new Date(year, 0, 1);
+            const endOfYear = new Date(year, 11, 31);
+            return getBusinessDays(startOfYear, endOfYear);
+        }
+
+        // Multi-year prediction calculations
+        function calculateMultiYearPredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            
+            // Calculate business days for each period
+            const endOfThisYear = new Date(currentYear, 11, 31);
+            const businessDaysThisYear = getBusinessDays(today, endOfThisYear);
+            const businessDaysPerYear = getBusinessDaysInYear(currentYear); // ~252 business days per year
+            
+            const scenarios = [
+                { name: 'conservative', multiplier: 0.5 },
+                { name: 'current', multiplier: 1.0 },
+                { name: 'optimistic', multiplier: 0.75 }
+            ];
+
+            const predictions = {};
+            const multiYearPredictions = {};
+
+            scenarios.forEach(scenario => {
+                const adjustedGrowth = avgDailyGrowth * scenario.multiplier;
+                const dailyMultiplier = 1 + (adjustedGrowth / 100);
+                
+                // This year prediction
+                const grossThisYear = currentBalance * Math.pow(dailyMultiplier, businessDaysThisYear);
+                const profitThisYear = grossThisYear - startingBalance;
+                const feeThisYear = Math.max(0, profitThisYear * 0.10);
+                const netThisYear = grossThisYear - feeThisYear;
+
+                predictions[scenario.name] = {
+                    balance: netThisYear,
+                    grossBalance: grossThisYear,
+                    traderFee: feeThisYear,
+                    growth: ((netThisYear - currentBalance) / currentBalance) * 100,
+                    totalProfit: profitThisYear
+                };
+
+                // Multi-year predictions (starting from net balance after this year's fee)
+                let runningBalance = netThisYear;
+                const yearlyPredictions = [];
+
+                for (let yearOffset = 1; yearOffset <= 3; yearOffset++) {
+                    const targetYear = currentYear + yearOffset;
+                    const businessDaysInYear = getBusinessDaysInYear(targetYear);
+                    
+                    // Grow for full year
+                    const grossYearEnd = runningBalance * Math.pow(dailyMultiplier, businessDaysInYear);
+                    
+                    // Calculate profit for this year only (growth from start of year)
+                    const yearProfit = grossYearEnd - runningBalance;
+                    const yearFee = Math.max(0, yearProfit * 0.10);
+                    const netYearEnd = grossYearEnd - yearFee;
+                    
+                    yearlyPredictions.push({
+                        year: targetYear,
+                        grossBalance: grossYearEnd,
+                        netBalance: netYearEnd,
+                        yearProfit: yearProfit,
+                        traderFee: yearFee,
+                        totalGrowthFromStart: ((netYearEnd - startingBalance) / startingBalance) * 100,
+                        businessDays: businessDaysInYear
+                    });
+                    
+                    // Update running balance for next year calculation
+                    runningBalance = netYearEnd;
+                }
+
+                multiYearPredictions[scenario.name] = yearlyPredictions;
+            });
+
+            return { 
+                predictions, 
+                multiYearPredictions,
+                businessDaysThisYear: businessDaysThisYear,
+                businessDaysPerYear: businessDaysPerYear
+            };
+        }
+
+        // Legacy function for compatibility
+        function calculatePredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
+            const result = calculateMultiYearPredictions(currentBalance, avgDailyGrowth, startingBalance);
+            return { 
+                predictions: result.predictions, 
+                businessDaysLeft: result.businessDaysThisYear,
+                multiYear: result.multiYearPredictions,
+                businessDaysPerYear: result.businessDaysPerYear
+            };
+        }
+
+        // Chart creation functions
+        // Generate future prediction data points
+        function generatePredictionData(currentBalance, avgDailyGrowth, businessDaysLeft) {
+            const today = new Date();
+            const endOfYear = new Date(today.getFullYear(), 11, 31);
+            const predictionData = [];
+            const dailyMultiplier = 1 + (avgDailyGrowth / 100);
+
+            let currentDate = new Date(today);
+            let projectedBalance = currentBalance;
+            let businessDayCount = 0;
+
+            // Generate weekly data points for smoother visualization
+            while (currentDate <= endOfYear && businessDayCount < businessDaysLeft) {
+                const dayOfWeek = currentDate.getDay();
+
+                // Only project on business days (Monday-Friday)
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                    // Add data point every 5 business days for cleaner chart
+                    if (businessDayCount % 5 === 0 || businessDayCount === businessDaysLeft - 1) {
+                        predictionData.push({
+                            date: new Date(currentDate),
+                            balance: projectedBalance,
+                            conservative: currentBalance * Math.pow(1 + (avgDailyGrowth * 0.5 / 100), businessDayCount)
+                        });
+                    }
+                    projectedBalance *= dailyMultiplier;
+                    businessDayCount++;
+                }
+
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            return predictionData;
+        }
+
+        function createBalanceChart(dailyData, avgDailyGrowth, businessDaysLeft) {
+            const ctx = document.getElementById('balanceChart').getContext('2d');
+
+            if (balanceChart) {
+                balanceChart.destroy();
+            }
+
+            // Historical data
+            const historicalLabels = dailyData.map(d => new Date(d.dateKey).toLocaleDateString());
+            const historicalData = dailyData.map(d => d.amount);
+
+            // Generate prediction data
+            const currentBalance = dailyData[dailyData.length - 1]?.amount || 0;
+            const predictionData = generatePredictionData(currentBalance, avgDailyGrowth, businessDaysLeft, 2317.07);
+
+            // Prediction labels and data
+            const predictionLabels = predictionData.map(d => d.date.toLocaleDateString());
+            const predictionValues = predictionData.map(d => d.balance);
+            const conservativeValues = predictionData.map(d => d.conservative);
+
+            // Combine labels (remove duplicate current date)
+            const allLabels = [...historicalLabels, ...predictionLabels];
+
+            // Create datasets
+            const datasets = [
+                {
+                    label: 'Historical Balance',
+                    data: [...historicalData, ...new Array(predictionLabels.length).fill(null)],
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4,
+                    fill: false,
+                    borderWidth: 3,
+                    pointBackgroundColor: '#3b82f6',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                },
+                {
+                    label: 'Current Trend Prediction',
+                    data: [...new Array(historicalData.length - 1).fill(null), currentBalance, ...predictionValues],
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.05)',
+                    tension: 0.4,
+                    fill: false,
+                    borderWidth: 2,
+                    borderDash: [8, 4],
+                    pointBackgroundColor: '#8b5cf6',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                },
+                {
+                    label: 'Conservative Prediction',
+                    data: [...new Array(historicalData.length - 1).fill(null), currentBalance, ...conservativeValues],
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                    tension: 0.4,
+                    fill: false,
+                    borderWidth: 2,
+                    borderDash: [4, 8],
+                    pointBackgroundColor: '#10b981',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                }
+            ];
+
+            balanceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: allLabels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#a1a1aa',
+                                font: {
+                                    family: 'Inter',
+                                    size: 12,
+                                    weight: '500'
+                                },
+                                usePointStyle: true,
+                                pointStyle: 'line'
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#a1a1aa',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            callbacks: {
+                                label: function (context) {
+                                    if (context.parsed.y !== null) {
+                                        return context.dataset.label + ': $' + context.parsed.y.toLocaleString();
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#71717a',
+                                font: {
+                                    family: 'Inter',
+                                    size: 11
+                                },
+                                maxTicksLimit: 12
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#71717a',
+                                font: {
+                                    family: 'Inter',
+                                    size: 11
+                                },
+                                callback: function (value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createGrowthChart(dailyData) {
+            const ctx = document.getElementById('growthChart').getContext('2d');
+
+            if (growthChart) {
+                growthChart.destroy();
+            }
+
+            const labels = dailyData.slice(1).map(d => new Date(d.dateKey).toLocaleDateString());
+            const data = dailyData.slice(1).map(d => d.growthRate);
+
+            growthChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily Growth (%)',
+                        data: data,
+                        backgroundColor: data.map(value => value >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'),
+                        borderColor: data.map(value => value >= 0 ? '#10b981' : '#ef4444'),
+                        borderWidth: 2,
+                        borderRadius: 6,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#a1a1aa',
+                                font: {
+                                    family: 'Inter',
+                                    size: 12,
+                                    weight: '500'
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#71717a',
+                                font: {
+                                    family: 'Inter',
+                                    size: 11
+                                }
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#71717a',
+                                font: {
+                                    family: 'Inter',
+                                    size: 11
+                                },
+                                callback: function (value) {
+                                    return value.toFixed(2) + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update UI functions
+        function updateDashboard(data, predictions) {
+            document.getElementById('currentBalance').textContent = formatCurrency(data.endBalance);
+            document.getElementById('startingAmount').textContent = formatCurrency(data.startBalance);
+            document.getElementById('totalGrowth').textContent = formatCurrency(data.totalGrowth);
+            document.getElementById('growthPercentage').textContent = formatPercentage(data.totalGrowthPercent);
+
+            document.getElementById('activeDays').textContent = data.activeDays;
+            document.getElementById('avgDailyGrowth').textContent = formatPercentage(data.avgDailyGrowth);
+            document.getElementById('totalVolume').textContent = formatCurrency(data.totalReceived);
+            document.getElementById('bestDay').textContent = formatPercentage(data.bestDay);
+
+            document.getElementById('businessDaysLeft').textContent = predictions.businessDaysLeft;
+
+            // Display trader fee (use current trend scenario for the fee display)
+            document.getElementById('traderFee').textContent = '-' + formatCurrency(predictions.predictions.current.traderFee);
+
+            // Update predictions (now showing net amounts after trader fee)
+            document.getElementById('conservativePrediction').textContent = formatCurrency(predictions.predictions.conservative.balance);
+            document.getElementById('conservativeGrowth').textContent = formatPercentage(predictions.predictions.conservative.growth);
+
+            document.getElementById('currentTrendPrediction').textContent = formatCurrency(predictions.predictions.current.balance);
+            document.getElementById('currentTrendGrowth').textContent = formatPercentage(predictions.predictions.current.growth);
+
+            document.getElementById('optimisticPrediction').textContent = formatCurrency(predictions.predictions.optimistic.balance);
+            document.getElementById('optimisticGrowth').textContent = formatPercentage(predictions.predictions.optimistic.growth);
+
+            // Update multi-year predictions
+            updateMultiYearPredictions(predictions.multiYear, predictions.businessDaysPerYear);
+        }
+
+        function updateMultiYearPredictions(multiYearData, businessDaysPerYear) {
+            const container = document.getElementById('multiYearPredictions');
+            container.innerHTML = '';
+
+            // Get the years (should be next 3 years)
+            const years = Object.keys(multiYearData.current).map(key => multiYearData.current[key].year);
+            
+            years.forEach((year, index) => {
+                const yearData = {
+                    conservative: multiYearData.conservative[index],
+                    current: multiYearData.current[index],
+                    optimistic: multiYearData.optimistic[index]
+                };
+
+                const yearCard = document.createElement('div');
+                yearCard.className = 'year-card';
+                yearCard.innerHTML = `
+                    <h4>End of ${year}</h4>
+                    <div class="year-scenarios">
+                        <div class="scenario-item">
+                            <div class="scenario-label">Conservative</div>
+                            <div class="scenario-value">${formatCurrency(yearData.conservative.netBalance)}</div>
+                        </div>
+                        <div class="scenario-item">
+                            <div class="scenario-label">Current Trend</div>
+                            <div class="scenario-value">${formatCurrency(yearData.current.netBalance)}</div>
+                        </div>
+                        <div class="scenario-item">
+                            <div class="scenario-label">Optimistic</div>
+                            <div class="scenario-value">${formatCurrency(yearData.optimistic.netBalance)}</div>
+                        </div>
+                    </div>
+                    <div class="year-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Annual Trader Fee</div>
+                            <div class="detail-value negative">-${formatCurrency(yearData.current.traderFee)}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Business Days</div>
+                            <div class="detail-value">${yearData.current.businessDays}</div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(yearCard);
+            });
+        }
+
+        // Main load function
+        async function loadData() {
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const dashboardEl = document.getElementById('dashboard');
+            const chartsEl = document.getElementById('chartsContainer');
+
+            try {
+                loadingEl.style.display = 'block';
+                errorEl.style.display = 'none';
+                dashboardEl.style.display = 'none';
+                chartsEl.style.display = 'none';
+
+                const transactions = await fetchTransactions();
+                const data = processTransactions(transactions);
+                const predictions = calculatePredictions(data.endBalance, data.avgDailyGrowth, data.startBalance);
+
+                updateDashboard(data, predictions);
+                createBalanceChart(data.dailyData, data.avgDailyGrowth, predictions.businessDaysLeft);
+                createGrowthChart(data.dailyData);
+
+                loadingEl.style.display = 'none';
+                dashboardEl.style.display = 'grid';
+                chartsEl.style.display = 'block';
+
+                document.getElementById('lastUpdated').textContent =
+                    `Last updated: ${new Date().toLocaleString()}`;
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                loadingEl.style.display = 'none';
+                errorEl.style.display = 'block';
+                errorEl.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Handle window resize for responsive charts
+        let resizeTimeout;
+        window.addEventListener('resize', function () {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function () {
+                if (balanceChart) {
+                    balanceChart.resize();
+                }
+                if (growthChart) {
+                    growthChart.resize();
+                }
+            }, 250);
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', loadData);
+
+        // Auto-refresh every 5 minutes
+        setInterval(loadData, 5 * 60 * 1000);
+    </script>
+</body>
+
+</html>
