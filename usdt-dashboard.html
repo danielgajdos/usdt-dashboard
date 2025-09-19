@@ -702,10 +702,14 @@
 
             <!-- Year-End Predictions -->
             <div class="card">
-                <h3>🔮 Year-End Predictions</h3>
+                <h3>🔮 Year-End Predictions (After 10% Trader Fee)</h3>
                 <div class="metric">
                     <span class="metric-label">Business Days Left</span>
                     <span class="metric-value" id="businessDaysLeft">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Trader Fee (10% of profit)</span>
+                    <span class="metric-value negative" id="traderFee">-$0</span>
                 </div>
                 <div class="predictions-grid">
                     <div class="prediction-card">
@@ -760,6 +764,11 @@
         </button>
 
         <div class="last-updated" id="lastUpdated"></div>
+
+        <div
+            style="text-align: center; color: var(--text-muted); font-size: 0.75rem; margin-top: 16px; padding: 0 20px;">
+            💡 All predictions include 10% trader fee deduction from total profits at year-end
+        </div>
     </div>
 
     <script>
@@ -902,12 +911,23 @@
             };
         }
 
-        // Prediction calculations
-        function calculatePredictions(currentBalance, avgDailyGrowth) {
-            const today = new Date();
-            const endOfYear = new Date(today.getFullYear(), 11, 31);
-            const businessDaysLeft = getBusinessDays(today, endOfYear);
+        // Calculate business days in a full year
+        function getBusinessDaysInYear(year) {
+            const startOfYear = new Date(year, 0, 1);
+            const endOfYear = new Date(year, 11, 31);
+            return getBusinessDays(startOfYear, endOfYear);
+        }
 
+        // Multi-year prediction calculations
+        function calculateMultiYearPredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            
+            // Calculate business days for each period
+            const endOfThisYear = new Date(currentYear, 11, 31);
+            const businessDaysThisYear = getBusinessDays(today, endOfThisYear);
+            const businessDaysPerYear = getBusinessDaysInYear(currentYear); // ~252 business days per year
+            
             const scenarios = [
                 { name: 'conservative', multiplier: 0.5 },
                 { name: 'current', multiplier: 1.0 },
@@ -915,20 +935,76 @@
             ];
 
             const predictions = {};
+            const multiYearPredictions = {};
 
             scenarios.forEach(scenario => {
                 const adjustedGrowth = avgDailyGrowth * scenario.multiplier;
                 const dailyMultiplier = 1 + (adjustedGrowth / 100);
-                const predictedBalance = currentBalance * Math.pow(dailyMultiplier, businessDaysLeft);
-                const growthPercent = ((predictedBalance - currentBalance) / currentBalance) * 100;
+                
+                // This year prediction
+                const grossThisYear = currentBalance * Math.pow(dailyMultiplier, businessDaysThisYear);
+                const profitThisYear = grossThisYear - startingBalance;
+                const feeThisYear = Math.max(0, profitThisYear * 0.10);
+                const netThisYear = grossThisYear - feeThisYear;
 
                 predictions[scenario.name] = {
-                    balance: predictedBalance,
-                    growth: growthPercent
+                    balance: netThisYear,
+                    grossBalance: grossThisYear,
+                    traderFee: feeThisYear,
+                    growth: ((netThisYear - currentBalance) / currentBalance) * 100,
+                    totalProfit: profitThisYear
                 };
+
+                // Multi-year predictions (starting from net balance after this year's fee)
+                let runningBalance = netThisYear;
+                const yearlyPredictions = [];
+
+                for (let yearOffset = 1; yearOffset <= 3; yearOffset++) {
+                    const targetYear = currentYear + yearOffset;
+                    const businessDaysInYear = getBusinessDaysInYear(targetYear);
+                    
+                    // Grow for full year
+                    const grossYearEnd = runningBalance * Math.pow(dailyMultiplier, businessDaysInYear);
+                    
+                    // Calculate profit for this year only (growth from start of year)
+                    const yearProfit = grossYearEnd - runningBalance;
+                    const yearFee = Math.max(0, yearProfit * 0.10);
+                    const netYearEnd = grossYearEnd - yearFee;
+                    
+                    yearlyPredictions.push({
+                        year: targetYear,
+                        grossBalance: grossYearEnd,
+                        netBalance: netYearEnd,
+                        yearProfit: yearProfit,
+                        traderFee: yearFee,
+                        totalGrowthFromStart: ((netYearEnd - startingBalance) / startingBalance) * 100,
+                        businessDays: businessDaysInYear
+                    });
+                    
+                    // Update running balance for next year calculation
+                    runningBalance = netYearEnd;
+                }
+
+                multiYearPredictions[scenario.name] = yearlyPredictions;
             });
 
-            return { predictions, businessDaysLeft };
+            return { 
+                predictions, 
+                multiYearPredictions,
+                businessDaysThisYear: businessDaysThisYear,
+                businessDaysPerYear: businessDaysPerYear
+            };
+        }
+
+        // Legacy function for compatibility
+        function calculatePredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
+            const result = calculateMultiYearPredictions(currentBalance, avgDailyGrowth, startingBalance);
+            return { 
+                predictions: result.predictions, 
+                businessDaysLeft: result.businessDaysThisYear,
+                multiYear: result.multiYearPredictions,
+                businessDaysPerYear: result.businessDaysPerYear
+            };
         }
 
         // Chart creation functions
@@ -980,7 +1056,7 @@
 
             // Generate prediction data
             const currentBalance = dailyData[dailyData.length - 1]?.amount || 0;
-            const predictionData = generatePredictionData(currentBalance, avgDailyGrowth, businessDaysLeft);
+            const predictionData = generatePredictionData(currentBalance, avgDailyGrowth, businessDaysLeft, 2317.07);
 
             // Prediction labels and data
             const predictionLabels = predictionData.map(d => d.date.toLocaleDateString());
@@ -1207,7 +1283,10 @@
 
             document.getElementById('businessDaysLeft').textContent = predictions.businessDaysLeft;
 
-            // Update predictions
+            // Display trader fee (use current trend scenario for the fee display)
+            document.getElementById('traderFee').textContent = '-' + formatCurrency(predictions.predictions.current.traderFee);
+
+            // Update predictions (now showing net amounts after trader fee)
             document.getElementById('conservativePrediction').textContent = formatCurrency(predictions.predictions.conservative.balance);
             document.getElementById('conservativeGrowth').textContent = formatPercentage(predictions.predictions.conservative.growth);
 
@@ -1233,7 +1312,7 @@
 
                 const transactions = await fetchTransactions();
                 const data = processTransactions(transactions);
-                const predictions = calculatePredictions(data.endBalance, data.avgDailyGrowth);
+                const predictions = calculatePredictions(data.endBalance, data.avgDailyGrowth, data.startBalance);
 
                 updateDashboard(data, predictions);
                 createBalanceChart(data.dailyData, data.avgDailyGrowth, predictions.businessDaysLeft);
