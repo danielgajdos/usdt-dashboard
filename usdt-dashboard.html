@@ -189,7 +189,8 @@
         }
 
         .chart-container {
-            grid-column: 1 / -1;
+            width: 100vw;
+            margin-left: calc(-50vw + 50%);
             background: var(--bg-card);
             backdrop-filter: blur(20px);
             border: 1px solid var(--border-color);
@@ -221,6 +222,12 @@
         .chart-container canvas {
             max-width: 100%;
             height: auto !important;
+        }
+
+        #chartsContainer {
+            width: 100%;
+            margin: 0;
+            padding: 0;
         }
 
         /* Chart responsive height */
@@ -928,11 +935,11 @@
         function calculatePredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
             const today = new Date();
             const currentYear = today.getFullYear();
-            
+
             // Calculate business days for this year
             const endOfThisYear = new Date(currentYear, 11, 31);
             const businessDaysLeft = getBusinessDays(today, endOfThisYear);
-            
+
             const scenarios = [
                 { name: 'conservative', multiplier: 0.5 },
                 { name: 'current', multiplier: 1.0 },
@@ -944,7 +951,7 @@
             scenarios.forEach(scenario => {
                 const adjustedGrowth = avgDailyGrowth * scenario.multiplier;
                 const dailyMultiplier = 1 + (adjustedGrowth / 100);
-                
+
                 // This year prediction
                 const grossThisYear = currentBalance * Math.pow(dailyMultiplier, businessDaysLeft);
                 const profitThisYear = grossThisYear - startingBalance;
