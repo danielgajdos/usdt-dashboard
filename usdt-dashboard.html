@@ -718,10 +718,7 @@
                     <span class="metric-label">Avg Daily Growth</span>
                     <span class="metric-value positive" id="avgDailyGrowth">+0.00%</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label">Total Volume</span>
-                    <span class="metric-value" id="totalVolume">$0.00</span>
-                </div>
+
                 <div class="metric">
                     <span class="metric-label">Best Day</span>
                     <span class="metric-value positive" id="bestDay">+0.00%</span>
@@ -876,7 +873,7 @@
 
             const dailyData = new Map();
             let runningBalance = 0;
-            let totalReceived = 0;
+
             const dailyGrowthRates = [];
 
             // Process each transaction
@@ -888,7 +885,6 @@
 
                 if (isReceived) {
                     runningBalance += amount;
-                    totalReceived += amount;
                 } else {
                     runningBalance -= amount;
                 }
@@ -936,7 +932,6 @@
                 totalGrowthPercent,
                 avgDailyGrowth,
                 bestDay,
-                totalReceived,
                 activeDays: dailyArray.length
             };
         }
@@ -1261,7 +1256,7 @@
 
             document.getElementById('activeDays').textContent = data.activeDays;
             document.getElementById('avgDailyGrowth').textContent = formatPercentage(data.avgDailyGrowth);
-            document.getElementById('totalVolume').textContent = formatCurrency(data.totalReceived);
+
             document.getElementById('bestDay').textContent = formatPercentage(data.bestDay);
 
             document.getElementById('businessDaysLeft').textContent = predictions.businessDaysLeft;
