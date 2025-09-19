@@ -1084,12 +1084,12 @@
         function calculateMultiYearPredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
             const today = new Date();
             const currentYear = today.getFullYear();
-            
+
             // Calculate business days for each period
             const endOfThisYear = new Date(currentYear, 11, 31);
             const businessDaysThisYear = getBusinessDays(today, endOfThisYear);
             const businessDaysPerYear = getBusinessDaysInYear(currentYear); // ~252 business days per year
-            
+
             const scenarios = [
                 { name: 'conservative', multiplier: 0.5 },
                 { name: 'current', multiplier: 1.0 },
@@ -1102,7 +1102,7 @@
             scenarios.forEach(scenario => {
                 const adjustedGrowth = avgDailyGrowth * scenario.multiplier;
                 const dailyMultiplier = 1 + (adjustedGrowth / 100);
-                
+
                 // This year prediction
                 const grossThisYear = currentBalance * Math.pow(dailyMultiplier, businessDaysThisYear);
                 const profitThisYear = grossThisYear - startingBalance;
@@ -1124,15 +1124,15 @@
                 for (let yearOffset = 1; yearOffset <= 3; yearOffset++) {
                     const targetYear = currentYear + yearOffset;
                     const businessDaysInYear = getBusinessDaysInYear(targetYear);
-                    
+
                     // Grow for full year
                     const grossYearEnd = runningBalance * Math.pow(dailyMultiplier, businessDaysInYear);
-                    
+
                     // Calculate profit for this year only (growth from start of year)
                     const yearProfit = grossYearEnd - runningBalance;
                     const yearFee = Math.max(0, yearProfit * 0.10);
                     const netYearEnd = grossYearEnd - yearFee;
-                    
+
                     yearlyPredictions.push({
                         year: targetYear,
                         grossBalance: grossYearEnd,
@@ -1142,7 +1142,7 @@
                         totalGrowthFromStart: ((netYearEnd - startingBalance) / startingBalance) * 100,
                         businessDays: businessDaysInYear
                     });
-                    
+
                     // Update running balance for next year calculation
                     runningBalance = netYearEnd;
                 }
@@ -1150,8 +1150,8 @@
                 multiYearPredictions[scenario.name] = yearlyPredictions;
             });
 
-            return { 
-                predictions, 
+            return {
+                predictions,
                 multiYearPredictions,
                 businessDaysThisYear: businessDaysThisYear,
                 businessDaysPerYear: businessDaysPerYear
@@ -1161,8 +1161,8 @@
         // Legacy function for compatibility
         function calculatePredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
             const result = calculateMultiYearPredictions(currentBalance, avgDailyGrowth, startingBalance);
-            return { 
-                predictions: result.predictions, 
+            return {
+                predictions: result.predictions,
                 businessDaysLeft: result.businessDaysThisYear,
                 multiYear: result.multiYearPredictions,
                 businessDaysPerYear: result.businessDaysPerYear
@@ -1466,10 +1466,10 @@
             const container = document.getElementById('multiYearPredictions');
             container.innerHTML = '';
 
-            // Get the years (should be next 3 years)
-            const years = Object.keys(multiYearData.current).map(key => multiYearData.current[key].year);
-            
-            years.forEach((year, index) => {
+            // Generic year labels instead of specific years
+            const yearLabels = ['Next Year', 'Year 2', 'Year 3'];
+
+            yearLabels.forEach((yearLabel, index) => {
                 const yearData = {
                     conservative: multiYearData.conservative[index],
                     current: multiYearData.current[index],
@@ -1479,7 +1479,7 @@
                 const yearCard = document.createElement('div');
                 yearCard.className = 'year-card';
                 yearCard.innerHTML = `
-                    <h4>End of ${year}</h4>
+                    <h4>End of ${yearLabel}</h4>
                     <div class="year-scenarios">
                         <div class="scenario-item">
                             <div class="scenario-label">Conservative</div>
