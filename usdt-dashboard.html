@@ -300,159 +300,9 @@
             line-height: 1.2;
         }
 
-        .multi-year-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-            gap: clamp(16px, 4vw, 24px);
-            margin-top: clamp(16px, 4vw, 20px);
-        }
 
-        .year-card {
-            background: linear-gradient(135deg,
-                    rgba(59, 130, 246, 0.08) 0%,
-                    rgba(139, 92, 246, 0.08) 50%,
-                    rgba(236, 72, 153, 0.08) 100%);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: clamp(12px, 3vw, 16px);
-            padding: clamp(20px, 5vw, 24px);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
 
-        .year-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
-        }
 
-        .year-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        .year-card h4 {
-            font-size: clamp(1.1rem, 3vw, 1.25rem);
-            font-weight: 700;
-            margin-bottom: clamp(16px, 4vw, 20px);
-            color: var(--text-primary);
-            text-align: center;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .year-scenarios {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: clamp(8px, 2vw, 12px);
-            margin-bottom: clamp(16px, 4vw, 20px);
-        }
-
-        .scenario-item {
-            text-align: center;
-            padding: clamp(8px, 2vw, 12px);
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            transition: all 0.2s ease;
-        }
-
-        .scenario-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .scenario-label {
-            font-size: clamp(0.7rem, 2vw, 0.75rem);
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: clamp(4px, 1vw, 6px);
-            font-weight: 500;
-        }
-
-        .scenario-value {
-            font-size: clamp(0.9rem, 2.5vw, 1rem);
-            font-weight: 700;
-            color: var(--text-primary);
-            line-height: 1.2;
-        }
-
-        .year-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: clamp(8px, 2vw, 12px);
-            padding-top: clamp(12px, 3vw, 16px);
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .detail-item {
-            text-align: center;
-        }
-
-        .detail-label {
-            font-size: clamp(0.7rem, 2vw, 0.75rem);
-            color: var(--text-muted);
-            margin-bottom: clamp(2px, 1vw, 4px);
-            font-weight: 400;
-        }
-
-        .detail-value {
-            font-size: clamp(0.8rem, 2vw, 0.875rem);
-            font-weight: 600;
-            color: var(--text-secondary);
-        }
-
-        .detail-value.negative {
-            color: var(--accent-danger);
-        }
-
-        @media (max-width: 768px) {
-            .multi-year-container {
-                grid-template-columns: 1fr;
-                gap: 16px;
-            }
-
-            .year-scenarios {
-                grid-template-columns: 1fr;
-                gap: 8px;
-            }
-
-            .scenario-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                text-align: left;
-                padding: 12px;
-            }
-
-            .scenario-label {
-                margin-bottom: 0;
-            }
-
-            .year-details {
-                grid-template-columns: 1fr;
-                gap: 8px;
-            }
-
-            .detail-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                text-align: left;
-                padding: 8px 0;
-            }
-
-            .detail-label {
-                margin-bottom: 0;
-            }
-        }
 
         .loading {
             text-align: center;
@@ -890,13 +740,7 @@
                 </div>
             </div>
 
-            <!-- Multi-Year Predictions -->
-            <div class="card" style="grid-column: 1 / -1;">
-                <h3>🚀 Multi-Year Growth Projections (After Annual 10% Trader Fees)</h3>
-                <div id="multiYearPredictions" class="multi-year-container">
-                    <!-- Multi-year cards will be populated by JavaScript -->
-                </div>
-            </div>
+
         </div>
 
         <!-- Charts -->
@@ -1080,16 +924,15 @@
             return getBusinessDays(startOfYear, endOfYear);
         }
 
-        // Multi-year prediction calculations
-        function calculateMultiYearPredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
+        // Year-end prediction calculations
+        function calculatePredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
             const today = new Date();
             const currentYear = today.getFullYear();
-
-            // Calculate business days for each period
+            
+            // Calculate business days for this year
             const endOfThisYear = new Date(currentYear, 11, 31);
-            const businessDaysThisYear = getBusinessDays(today, endOfThisYear);
-            const businessDaysPerYear = getBusinessDaysInYear(currentYear); // ~252 business days per year
-
+            const businessDaysLeft = getBusinessDays(today, endOfThisYear);
+            
             const scenarios = [
                 { name: 'conservative', multiplier: 0.5 },
                 { name: 'current', multiplier: 1.0 },
@@ -1097,14 +940,13 @@
             ];
 
             const predictions = {};
-            const multiYearPredictions = {};
 
             scenarios.forEach(scenario => {
                 const adjustedGrowth = avgDailyGrowth * scenario.multiplier;
                 const dailyMultiplier = 1 + (adjustedGrowth / 100);
-
+                
                 // This year prediction
-                const grossThisYear = currentBalance * Math.pow(dailyMultiplier, businessDaysThisYear);
+                const grossThisYear = currentBalance * Math.pow(dailyMultiplier, businessDaysLeft);
                 const profitThisYear = grossThisYear - startingBalance;
                 const feeThisYear = Math.max(0, profitThisYear * 0.10);
                 const netThisYear = grossThisYear - feeThisYear;
@@ -1116,56 +958,11 @@
                     growth: ((netThisYear - currentBalance) / currentBalance) * 100,
                     totalProfit: profitThisYear
                 };
-
-                // Multi-year predictions (starting from net balance after this year's fee)
-                let runningBalance = netThisYear;
-                const yearlyPredictions = [];
-
-                for (let yearOffset = 1; yearOffset <= 3; yearOffset++) {
-                    const targetYear = currentYear + yearOffset;
-                    const businessDaysInYear = getBusinessDaysInYear(targetYear);
-
-                    // Grow for full year
-                    const grossYearEnd = runningBalance * Math.pow(dailyMultiplier, businessDaysInYear);
-
-                    // Calculate profit for this year only (growth from start of year)
-                    const yearProfit = grossYearEnd - runningBalance;
-                    const yearFee = Math.max(0, yearProfit * 0.10);
-                    const netYearEnd = grossYearEnd - yearFee;
-
-                    yearlyPredictions.push({
-                        year: targetYear,
-                        grossBalance: grossYearEnd,
-                        netBalance: netYearEnd,
-                        yearProfit: yearProfit,
-                        traderFee: yearFee,
-                        totalGrowthFromStart: ((netYearEnd - startingBalance) / startingBalance) * 100,
-                        businessDays: businessDaysInYear
-                    });
-
-                    // Update running balance for next year calculation
-                    runningBalance = netYearEnd;
-                }
-
-                multiYearPredictions[scenario.name] = yearlyPredictions;
             });
 
             return {
                 predictions,
-                multiYearPredictions,
-                businessDaysThisYear: businessDaysThisYear,
-                businessDaysPerYear: businessDaysPerYear
-            };
-        }
-
-        // Legacy function for compatibility
-        function calculatePredictions(currentBalance, avgDailyGrowth, startingBalance = 2317.07) {
-            const result = calculateMultiYearPredictions(currentBalance, avgDailyGrowth, startingBalance);
-            return {
-                predictions: result.predictions,
-                businessDaysLeft: result.businessDaysThisYear,
-                multiYear: result.multiYearPredictions,
-                businessDaysPerYear: result.businessDaysPerYear
+                businessDaysLeft
             };
         }
 
@@ -1458,56 +1255,10 @@
             document.getElementById('optimisticPrediction').textContent = formatCurrency(predictions.predictions.optimistic.balance);
             document.getElementById('optimisticGrowth').textContent = formatPercentage(predictions.predictions.optimistic.growth);
 
-            // Update multi-year predictions
-            updateMultiYearPredictions(predictions.multiYear, predictions.businessDaysPerYear);
+
         }
 
-        function updateMultiYearPredictions(multiYearData, businessDaysPerYear) {
-            const container = document.getElementById('multiYearPredictions');
-            container.innerHTML = '';
 
-            // Generic year labels instead of specific years
-            const yearLabels = ['Next Year', 'Year 2', 'Year 3'];
-
-            yearLabels.forEach((yearLabel, index) => {
-                const yearData = {
-                    conservative: multiYearData.conservative[index],
-                    current: multiYearData.current[index],
-                    optimistic: multiYearData.optimistic[index]
-                };
-
-                const yearCard = document.createElement('div');
-                yearCard.className = 'year-card';
-                yearCard.innerHTML = `
-                    <h4>End of ${yearLabel}</h4>
-                    <div class="year-scenarios">
-                        <div class="scenario-item">
-                            <div class="scenario-label">Conservative</div>
-                            <div class="scenario-value">${formatCurrency(yearData.conservative.netBalance)}</div>
-                        </div>
-                        <div class="scenario-item">
-                            <div class="scenario-label">Current Trend</div>
-                            <div class="scenario-value">${formatCurrency(yearData.current.netBalance)}</div>
-                        </div>
-                        <div class="scenario-item">
-                            <div class="scenario-label">Optimistic</div>
-                            <div class="scenario-value">${formatCurrency(yearData.optimistic.netBalance)}</div>
-                        </div>
-                    </div>
-                    <div class="year-details">
-                        <div class="detail-item">
-                            <div class="detail-label">Annual Trader Fee</div>
-                            <div class="detail-value negative">-${formatCurrency(yearData.current.traderFee)}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Business Days</div>
-                            <div class="detail-value">${yearData.current.businessDays}</div>
-                        </div>
-                    </div>
-                `;
-                container.appendChild(yearCard);
-            });
-        }
 
         // Main load function
         async function loadData() {
