@@ -81,17 +81,18 @@
             z-index: -1;
         }
 
-        .header h1 {
-            font-size: clamp(1.75rem, 6vw, 3.5rem);
-            font-weight: 700;
+        .logo {
+            max-width: clamp(200px, 50vw, 400px);
+            height: auto;
             margin-bottom: clamp(8px, 2vw, 12px);
-            background: var(--gold-metallic);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -0.02em;
-            line-height: 1.2;
-            text-shadow: 0 0 30px rgba(212, 175, 55, 0.5);
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .logo:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 40px rgba(212, 175, 55, 0.5);
         }
 
         .header p {
@@ -524,9 +525,8 @@
                 padding: 12px;
             }
 
-            .header h1 {
-                font-size: clamp(1.5rem, 8vw, 2.5rem);
-                line-height: 1.1;
+            .logo {
+                max-width: clamp(150px, 60vw, 300px);
             }
 
             .header p {
@@ -619,8 +619,8 @@
                 margin-bottom: 16px;
             }
 
-            .header h1 {
-                font-size: 1.75rem;
+            .logo {
+                max-width: clamp(120px, 70vw, 250px);
             }
 
             .header p {
@@ -675,7 +675,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>USDT Trading Dashboard</h1>
+            <img src="Gemini_Generated_Image_dgnpw5dgnpw5dgnp.jpg" alt="Trading Dashboard Logo" class="logo" />
             <p>Real-time portfolio tracking and growth predictions</p>
         </div>
 
