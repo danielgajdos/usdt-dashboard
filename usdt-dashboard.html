@@ -398,6 +398,220 @@
             border-color: var(--gold-light);
         }
 
+        .button-group {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            align-items: center;
+            margin: clamp(24px, 6vw, 32px) auto;
+            flex-wrap: wrap;
+        }
+
+        .settings-btn {
+            background: var(--bg-card);
+            color: var(--gold-light);
+            border: 1px solid var(--border-color);
+            padding: clamp(12px, 3vw, 14px) clamp(20px, 5vw, 28px);
+            border-radius: 12px;
+            font-size: clamp(0.75rem, 2.5vw, 0.875rem);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(6px, 2vw, 8px);
+            box-shadow: var(--shadow-md);
+            min-height: 44px;
+            white-space: nowrap;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .settings-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg), 0 0 20px rgba(212, 175, 55, 0.3);
+            border-color: var(--border-gold);
+            background: var(--bg-card-hover);
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-gold);
+            border-radius: 16px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: var(--shadow-xl), 0 0 40px rgba(212, 175, 55, 0.2);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            color: var(--gold-light);
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .close-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .setting-group {
+            margin-bottom: 24px;
+        }
+
+        .setting-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .setting-group label {
+            display: block;
+            color: var(--gold-light);
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+        }
+
+        .setting-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .setting-group input:focus {
+            outline: none;
+            border-color: var(--gold-medium);
+            box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+        }
+
+        .setting-group small {
+            display: block;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .setting-group small a {
+            color: var(--gold-medium);
+            text-decoration: none;
+        }
+
+        .setting-group small a:hover {
+            text-decoration: underline;
+        }
+
+        .modal-footer {
+            padding: 24px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .cancel-btn, .save-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid var(--border-color);
+        }
+
+        .cancel-btn {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+
+        .cancel-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .save-btn {
+            background: var(--gold-metallic);
+            color: #000;
+            border-color: var(--gold-dark);
+        }
+
+        .save-btn:hover {
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
+        }
+
+        @media (max-width: 480px) {
+            .button-group {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .modal {
+                padding: 16px;
+            }
+
+            .modal-header, .modal-body, .modal-footer {
+                padding: 16px;
+            }
+
+            .modal-footer {
+                flex-direction: column;
+            }
+
+            .cancel-btn, .save-btn {
+                width: 100%;
+            }
+        }
+
         .refresh-btn:active {
             transform: translateY(0);
         }
@@ -781,14 +995,51 @@
             </div>
         </div>
 
-        <button class="refresh-btn" onclick="loadData()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-            Refresh Data
-        </button>
+        <div class="button-group">
+            <button class="refresh-btn" onclick="loadData()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                Refresh Data
+            </button>
+            
+            <button class="settings-btn" onclick="openSettings()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="m12 1 1.68 3.36L17 6.64l-1.68 3.36L12 12l-3.32-2.32L6 8l2.32-3.32L12 1z"></path>
+                    <path d="m12 23-1.68-3.36L7 17.36l1.68-3.36L12 12l3.32 2.32L18 16l-2.32 3.32L12 23z"></path>
+                </svg>
+                Settings
+            </button>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>⚙️ Dashboard Settings</h3>
+                    <button class="close-btn" onclick="closeSettings()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="setting-group">
+                        <label for="walletAddress">Wallet Address:</label>
+                        <input type="text" id="walletAddress" placeholder="Enter your wallet address (0x...)" />
+                        <small>Supports Ethereum, BSC, Bybit, and Metamask wallets</small>
+                    </div>
+                    <div class="setting-group">
+                        <label for="apiKey">API Key:</label>
+                        <input type="text" id="apiKey" placeholder="Enter your Etherscan API key" />
+                        <small>Get your free API key from <a href="https://etherscan.io/apis" target="_blank">Etherscan.io</a></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="cancel-btn" onclick="closeSettings()">Cancel</button>
+                    <button class="save-btn" onclick="saveSettings()">Save Settings</button>
+                </div>
+            </div>
+        </div>
 
         <div class="last-updated" id="lastUpdated"></div>
 
@@ -799,12 +1050,39 @@
     </div>
 
     <script>
-        // Configuration
-        const CONFIG = {
+        // Configuration with localStorage support
+        const DEFAULT_CONFIG = {
             ETHERSCAN_V2_API_URL: 'https://api.etherscan.io/v2/api',
             WALLET_ADDRESS: '0xe74a5C39231e2C065fA53dE164E31548cAA45078',
             API_KEY: 'UQZ2NTK6G26RIJTA34B9MIA74ZZ5BD8G7U'
         };
+
+        // Load configuration from localStorage or use defaults
+        function loadConfig() {
+            const savedConfig = localStorage.getItem('dashboardConfig');
+            if (savedConfig) {
+                try {
+                    return { ...DEFAULT_CONFIG, ...JSON.parse(savedConfig) };
+                } catch (e) {
+                    console.warn('Failed to parse saved config, using defaults');
+                    return DEFAULT_CONFIG;
+                }
+            }
+            return DEFAULT_CONFIG;
+        }
+
+        // Save configuration to localStorage
+        function saveConfig(config) {
+            try {
+                localStorage.setItem('dashboardConfig', JSON.stringify(config));
+                return true;
+            } catch (e) {
+                console.error('Failed to save config:', e);
+                return false;
+            }
+        }
+
+        let CONFIG = loadConfig();
 
         let balanceChart, growthChart;
 
@@ -837,21 +1115,81 @@
             return count;
         }
 
-        // API call function
+        // Settings modal functions
+        function openSettings() {
+            document.getElementById('walletAddress').value = CONFIG.WALLET_ADDRESS;
+            document.getElementById('apiKey').value = CONFIG.API_KEY;
+            document.getElementById('settingsModal').style.display = 'flex';
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
+        function saveSettings() {
+            const walletAddress = document.getElementById('walletAddress').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
+
+            // Validate wallet address
+            if (!walletAddress || !walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+                alert('Please enter a valid wallet address (0x followed by 40 hexadecimal characters)');
+                return;
+            }
+
+            // Validate API key
+            if (!apiKey || apiKey.length < 10) {
+                alert('Please enter a valid API key');
+                return;
+            }
+
+            // Update configuration
+            CONFIG.WALLET_ADDRESS = walletAddress;
+            CONFIG.API_KEY = apiKey;
+
+            // Save to localStorage
+            if (saveConfig({ WALLET_ADDRESS: walletAddress, API_KEY: apiKey })) {
+                closeSettings();
+                // Reload data with new settings
+                loadData();
+            } else {
+                alert('Failed to save settings. Please try again.');
+            }
+        }
+
+        // Detect wallet type and determine appropriate API endpoints
+        function getApiConfig(walletAddress) {
+            // All supported wallets use Ethereum-compatible addresses
+            // We'll use BSC (Binance Smart Chain) as it's most common for USDT trading
+            return {
+                chainId: 56, // BSC
+                apiUrl: CONFIG.ETHERSCAN_V2_API_URL,
+                chainName: 'BSC'
+            };
+        }
+
+        // API call function with multi-wallet support
         async function fetchTransactions() {
-            const url = `${CONFIG.ETHERSCAN_V2_API_URL}?chainid=56&module=account&action=tokentx&address=${CONFIG.WALLET_ADDRESS}&page=1&offset=1000&sort=desc&apikey=${CONFIG.API_KEY}`;
+            const apiConfig = getApiConfig(CONFIG.WALLET_ADDRESS);
+            const url = `${apiConfig.apiUrl}?chainid=${apiConfig.chainId}&module=account&action=tokentx&address=${CONFIG.WALLET_ADDRESS}&page=1&offset=1000&sort=desc&apikey=${CONFIG.API_KEY}`;
 
             try {
+                console.log(`Fetching transactions for ${apiConfig.chainName} wallet: ${CONFIG.WALLET_ADDRESS}`);
                 const response = await fetch(url);
                 const data = await response.json();
 
                 if (data.status === '1' && data.result) {
-                    // Filter for USDT transactions
+                    // Filter for USDT and other stablecoin transactions
                     return data.result.filter(tx =>
                         tx.tokenSymbol && (
                             tx.tokenSymbol.toUpperCase().includes('USDT') ||
                             tx.tokenSymbol.toUpperCase().includes('USD') ||
-                            (tx.tokenName && tx.tokenName.toUpperCase().includes('TETHER'))
+                            tx.tokenSymbol.toUpperCase().includes('BUSD') ||
+                            tx.tokenSymbol.toUpperCase().includes('USDC') ||
+                            (tx.tokenName && (
+                                tx.tokenName.toUpperCase().includes('TETHER') ||
+                                tx.tokenName.toUpperCase().includes('USD COIN') ||
+                                tx.tokenName.toUpperCase().includes('BINANCE USD')
+                            ))
                         )
                     );
                 }
@@ -1334,6 +1672,20 @@
 
         // Auto-refresh every 5 minutes
         setInterval(loadData, 5 * 60 * 1000);
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeSettings();
+            }
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('settingsModal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                closeSettings();
+            }
+        });
     </script>
 </body>
 
