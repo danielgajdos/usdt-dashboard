@@ -1230,6 +1230,7 @@
 
             try {
                 console.log(`Fetching transactions for ${apiConfig.chainName} wallet: ${CONFIG.WALLET_ADDRESS}`);
+            console.log(`Using API URL: ${url}`);
                 const response = await fetch(url);
                 const data = await response.json();
 
@@ -1258,17 +1259,89 @@
 
         // Data processing function
         // Enhanced transaction categorization
-        function categorizeTransaction(tx, walletAddress) {
-            const isReceived = tx.to.toLowerCase() === walletAddress.toLowerCase();
-            const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
+        // Analyze wallet patterns to categorize transactions
+        function analyzeWalletPatterns(transactions, userWallet) {
+            const walletTypes = new Map();
+            const sortedTxs = transactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
             
-            // Categorize based on amount patterns and timing
-            if (amount > 10000) {
+            // Find the first deposit (incoming transaction) - this wallet is likely for deposits/withdrawals
+            const firstDeposit = sortedTxs.find(tx => 
+                tx.to.toLowerCase() === userWallet.toLowerCase()
+            );
+            
+            if (firstDeposit) {
+                const depositWallet = firstDeposit.from.toLowerCase();
+                walletTypes.set(depositWallet, 'deposit_withdrawal');
+                console.log(`Identified deposit/withdrawal wallet: ${depositWallet}`);
+            }
+            
+            // Analyze transaction patterns for each external wallet
+            const walletStats = new Map();
+            
+            sortedTxs.forEach(tx => {
+                const isReceived = tx.to.toLowerCase() === userWallet.toLowerCase();
+                const externalWallet = (isReceived ? tx.from : tx.to).toLowerCase();
+                
+                if (!walletStats.has(externalWallet)) {
+                    walletStats.set(externalWallet, {
+                        inCount: 0,
+                        outCount: 0,
+                        totalIn: 0,
+                        totalOut: 0,
+                        firstSeen: parseInt(tx.timeStamp),
+                        transactions: []
+                    });
+                }
+                
+                const stats = walletStats.get(externalWallet);
+                const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
+                
+                if (isReceived) {
+                    stats.inCount++;
+                    stats.totalIn += amount;
+                } else {
+                    stats.outCount++;
+                    stats.totalOut += amount;
+                }
+                
+                stats.transactions.push({
+                    ...tx,
+                    amount,
+                    isReceived,
+                    timestamp: parseInt(tx.timeStamp)
+                });
+            });
+            
+            // Categorize wallets based on patterns
+            walletStats.forEach((stats, wallet) => {
+                if (walletTypes.has(wallet)) return; // Already categorized
+                
+                const totalTxs = stats.inCount + stats.outCount;
+                const balanceRatio = Math.abs(stats.totalIn - stats.totalOut) / Math.max(stats.totalIn, stats.totalOut, 1);
+                
+                // If wallet has very unbalanced in/out ratio, likely deposit/withdrawal
+                // If wallet has balanced in/out, likely trading
+                if (balanceRatio > 0.8 || totalTxs < 3) {
+                    walletTypes.set(wallet, 'deposit_withdrawal');
+                    console.log(`Identified deposit/withdrawal wallet (unbalanced): ${wallet}`);
+                } else {
+                    walletTypes.set(wallet, 'trading');
+                    console.log(`Identified trading wallet: ${wallet}`);
+                }
+            });
+            
+            return walletTypes;
+        }
+
+        function categorizeTransaction(tx, walletAddress, walletTypes) {
+            const isReceived = tx.to.toLowerCase() === walletAddress.toLowerCase();
+            const externalWallet = (isReceived ? tx.from : tx.to).toLowerCase();
+            const walletType = walletTypes.get(externalWallet) || 'trading'; // Default to trading
+            
+            if (walletType === 'deposit_withdrawal') {
                 return isReceived ? 'deposit' : 'withdrawal';
-            } else if (amount > 100) {
-                return isReceived ? 'trade_in' : 'trade_out';
             } else {
-                return isReceived ? 'small_in' : 'small_out';
+                return isReceived ? 'trade_in' : 'trade_out';
             }
         }
 
@@ -1296,6 +1369,9 @@
 
             // Sort by timestamp (oldest first)
             const sortedTxs = transactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
+            
+            // Analyze wallet patterns to identify deposit/withdrawal vs trading wallets
+            const walletTypes = analyzeWalletPatterns(sortedTxs, CONFIG.WALLET_ADDRESS);
 
             const dailyData = new Map();
             let runningBalance = 0;
@@ -1308,7 +1384,7 @@
                 const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
                 const date = new Date(parseInt(tx.timeStamp) * 1000);
                 const dateKey = date.toISOString().split('T')[0];
-                const category = categorizeTransaction(tx, CONFIG.WALLET_ADDRESS);
+                const category = categorizeTransaction(tx, CONFIG.WALLET_ADDRESS, walletTypes);
 
                 // Update running balance
                 if (isReceived) {
@@ -1359,15 +1435,28 @@
             // Calculate daily P&L excluding deposits/withdrawals
             const dailyArray = Array.from(dailyData.entries())
                 .map(([dateKey, data]) => {
-                    // Calculate trading profit (excluding deposits/withdrawals)
-                    const tradingBalance = data.endBalance - data.startBalance - data.deposits + data.withdrawals;
-                    const tradingProfitPercent = data.startBalance > 0 ? (tradingBalance / data.startBalance) * 100 : 0;
+                    // Calculate net trading result for the day
+                    const tradeInAmount = data.trades
+                        .filter(t => t.type === 'in')
+                        .reduce((sum, t) => sum + t.amount, 0);
+                    const tradeOutAmount = data.trades
+                        .filter(t => t.type === 'out')
+                        .reduce((sum, t) => sum + t.amount, 0);
                     
+                    // Trading profit is the net result of trades (in - out)
+                    const tradingProfit = tradeInAmount - tradeOutAmount;
+                    
+                    // Calculate percentage based on the balance at start of day (excluding deposits)
+                    const baseBalance = data.startBalance + data.deposits - data.withdrawals;
+                    const tradingProfitPercent = baseBalance > 0 ? (tradingProfit / baseBalance) * 100 : 0;
+
                     return {
                         dateKey,
                         ...data,
-                        tradingProfit: tradingBalance,
+                        tradingProfit: tradingProfit,
                         tradingProfitPercent: tradingProfitPercent,
+                        tradeInAmount,
+                        tradeOutAmount,
                         hasTrades: data.trades.length > 0,
                         // Legacy compatibility
                         amount: data.endBalance,
@@ -1379,10 +1468,10 @@
             // Calculate statistics
             const tradingDays = dailyArray.filter(day => day.hasTrades);
             const tradingProfits = tradingDays.map(day => day.tradingProfitPercent).filter(p => !isNaN(p));
-            
+
             const currentBalance = runningBalance;
             const totalTradingProfit = dailyArray.reduce((sum, day) => sum + day.tradingProfit, 0);
-            const avgDailyGrowth = tradingProfits.length > 0 ? 
+            const avgDailyGrowth = tradingProfits.length > 0 ?
                 tradingProfits.reduce((sum, p) => sum + p, 0) / tradingProfits.length : 0;
             const bestDay = tradingProfits.length > 0 ? Math.max(...tradingProfits) : 0;
 
@@ -1390,6 +1479,23 @@
             const today = new Date().toISOString().split('T')[0];
             const todayData = dailyArray.find(day => day.dateKey === today) || { tradingProfit: 0, tradingProfitPercent: 0 };
             const lastTradingDay = tradingDays.length > 0 ? tradingDays[tradingDays.length - 1] : { tradingProfit: 0, tradingProfitPercent: 0 };
+
+            // Debug logging
+            console.log(`Processed ${sortedTxs.length} transactions`);
+            console.log(`Found ${tradingDays.length} trading days`);
+            console.log(`Total deposits: ${totalDeposits}, Total withdrawals: ${totalWithdrawals}`);
+            console.log(`Current balance: ${currentBalance}`);
+            console.log(`Today's P&L: ${todayData.tradingProfit} (${todayData.tradingProfitPercent}%)`);
+            console.log(`Last trading day P&L: ${lastTradingDay.tradingProfit} (${lastTradingDay.tradingProfitPercent}%)`);
+            
+            if (tradingDays.length > 0) {
+                console.log('Recent trading days:', tradingDays.slice(-3).map(d => ({
+                    date: d.dateKey,
+                    profit: d.tradingProfit,
+                    percent: d.tradingProfitPercent,
+                    trades: d.trades.length
+                })));
+            }
 
             return {
                 dailyData: dailyArray,
@@ -1758,7 +1864,7 @@
                 // Apply color classes based on P&L
                 const todayPnLEl = document.getElementById('todayPnL');
                 const lastDayPnLEl = document.getElementById('lastTradingDayPnL');
-                
+
                 todayPnLEl.className = 'metric-value ' + (data.todayPnL.tradingProfit >= 0 ? 'positive' : 'negative');
                 lastDayPnLEl.className = 'metric-value ' + (data.lastTradingDayPnL.tradingProfit >= 0 ? 'positive' : 'negative');
             }
