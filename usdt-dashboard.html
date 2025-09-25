@@ -942,6 +942,10 @@
                     <span class="metric-label">Growth Percentage</span>
                     <span class="metric-value positive" id="growthPercentage">+0.00%</span>
                 </div>
+                <div class="metric">
+                    <span class="metric-label">Current Trader Fee (10%)</span>
+                    <span class="metric-value negative" id="currentTraderFee">-$0.00</span>
+                </div>
             </div>
 
             <!-- Trading Performance -->
@@ -1891,12 +1895,11 @@
                                 label: function (context) {
                                     const percentage = context.parsed.y.toFixed(2);
                                     const currencyAmount = currencyData[context.dataIndex];
-                                    const usdAmount = formatCurrency(currencyAmount, 'USD');
-                                    const eurAmount = formatCurrency(currencyAmount, 'EUR');
+                                    const selectedCurrency = CONFIG.CURRENCY || 'USD';
+                                    const formattedAmount = formatCurrency(currencyAmount, selectedCurrency);
                                     return [
                                         `Growth: ${percentage}%`,
-                                        `Amount: ${usdAmount}`,
-                                        `Amount: ${eurAmount}`
+                                        `Amount: ${formattedAmount}`
                                     ];
                                 }
                             }
@@ -1943,6 +1946,10 @@
             document.getElementById('startingAmount').textContent = formatCurrency(data.startBalance);
             document.getElementById('totalGrowth').textContent = formatCurrency(data.totalGrowth);
             document.getElementById('growthPercentage').textContent = formatPercentage(data.totalGrowthPercent);
+            
+            // Calculate current trader fee (10% of profit)
+            const currentTraderFee = Math.max(0, data.totalGrowth * 0.10);
+            document.getElementById('currentTraderFee').textContent = '-' + formatCurrency(currentTraderFee);
 
             document.getElementById('activeDays').textContent = data.activeDays;
             document.getElementById('avgDailyGrowth').textContent = formatPercentage(data.avgDailyGrowth);
