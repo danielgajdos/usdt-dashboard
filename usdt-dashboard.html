@@ -534,6 +534,25 @@
             box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
         }
 
+        .setting-group select {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+            cursor: pointer;
+        }
+
+        .setting-group select:focus {
+            outline: none;
+            border-color: var(--gold-medium);
+            box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+        }
+
         .setting-group small {
             display: block;
             color: var(--text-muted);
@@ -559,7 +578,8 @@
             justify-content: flex-end;
         }
 
-        .cancel-btn, .save-btn {
+        .cancel-btn,
+        .save-btn {
             padding: 10px 20px;
             border-radius: 8px;
             font-size: 0.875rem;
@@ -599,7 +619,9 @@
                 padding: 16px;
             }
 
-            .modal-header, .modal-body, .modal-footer {
+            .modal-header,
+            .modal-body,
+            .modal-footer {
                 padding: 16px;
             }
 
@@ -607,7 +629,8 @@
                 flex-direction: column;
             }
 
-            .cancel-btn, .save-btn {
+            .cancel-btn,
+            .save-btn {
                 width: 100%;
             }
         }
@@ -921,18 +944,29 @@
                 </div>
             </div>
 
-            <!-- Trading Statistics -->
+            <!-- Trading Performance -->
             <div class="card">
-                <h3>📊 Trading Statistics</h3>
+                <h3>📊 Trading Performance</h3>
                 <div class="metric">
-                    <span class="metric-label">Active Days</span>
+                    <span class="metric-label">Current Balance</span>
+                    <span class="metric-value" id="currentBalanceDisplay">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Today's P&L</span>
+                    <span class="metric-value" id="todayPnL">$0.00 (0.00%)</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Last Trading Day P&L</span>
+                    <span class="metric-value" id="lastTradingDayPnL">$0.00 (0.00%)</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Active Trading Days</span>
                     <span class="metric-value" id="activeDays">0</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">Avg Daily Growth</span>
                     <span class="metric-value positive" id="avgDailyGrowth">+0.00%</span>
                 </div>
-
                 <div class="metric">
                     <span class="metric-label">Best Day</span>
                     <span class="metric-value positive" id="bestDay">+0.00%</span>
@@ -1004,7 +1038,7 @@
                 </svg>
                 Refresh Data
             </button>
-            
+
             <button class="settings-btn" onclick="openSettings()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"></circle>
@@ -1031,7 +1065,16 @@
                     <div class="setting-group">
                         <label for="apiKey">API Key:</label>
                         <input type="text" id="apiKey" placeholder="Enter your Etherscan API key" />
-                        <small>Get your free API key from <a href="https://etherscan.io/apis" target="_blank">Etherscan.io</a></small>
+                        <small>Get your free API key from <a href="https://etherscan.io/apis"
+                                target="_blank">Etherscan.io</a></small>
+                    </div>
+                    <div class="setting-group">
+                        <label for="currency">Display Currency:</label>
+                        <select id="currency">
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                        </select>
+                        <small>Choose your preferred currency for profit/loss calculations</small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1053,8 +1096,9 @@
         // Configuration with localStorage support
         const DEFAULT_CONFIG = {
             ETHERSCAN_V2_API_URL: 'https://api.etherscan.io/v2/api',
-            WALLET_ADDRESS: '0xe74a5C39231e2C065fA53dE164E31548cAA45078',
-            API_KEY: 'UQZ2NTK6G26RIJTA34B9MIA74ZZ5BD8G7U'
+            WALLET_ADDRESS: '0x676E36d6F7efC900701F9D6176a68AAeC12e3F47',
+            API_KEY: 'UQZ2NTK6G26RIJTA34B9MIA74ZZ5BD8G7U',
+            CURRENCY: 'USD' // Default currency
         };
 
         // Load configuration from localStorage or use defaults
@@ -1087,12 +1131,21 @@
         let balanceChart, growthChart;
 
         // Utility functions
-        function formatCurrency(amount) {
-            return new Intl.NumberFormat('en-US', {
+        function formatCurrency(amount, currency = null) {
+            const curr = currency || CONFIG.CURRENCY || 'USD';
+            const locale = curr === 'EUR' ? 'de-DE' : 'en-US';
+            return new Intl.NumberFormat(locale, {
                 style: 'currency',
-                currency: 'USD',
+                currency: curr,
                 minimumFractionDigits: 2
             }).format(amount);
+        }
+
+        function formatPnL(amount, percentage, currency = null) {
+            const curr = currency || CONFIG.CURRENCY || 'USD';
+            const amountStr = formatCurrency(amount, curr);
+            const sign = percentage >= 0 ? '+' : '';
+            return `${amountStr} (${sign}${percentage.toFixed(2)}%)`;
         }
 
         function formatPercentage(percent) {
@@ -1119,6 +1172,7 @@
         function openSettings() {
             document.getElementById('walletAddress').value = CONFIG.WALLET_ADDRESS;
             document.getElementById('apiKey').value = CONFIG.API_KEY;
+            document.getElementById('currency').value = CONFIG.CURRENCY || 'USD';
             document.getElementById('settingsModal').style.display = 'flex';
         }
 
@@ -1129,6 +1183,7 @@
         function saveSettings() {
             const walletAddress = document.getElementById('walletAddress').value.trim();
             const apiKey = document.getElementById('apiKey').value.trim();
+            const currency = document.getElementById('currency').value;
 
             // Validate wallet address
             if (!walletAddress || !walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
@@ -1145,9 +1200,10 @@
             // Update configuration
             CONFIG.WALLET_ADDRESS = walletAddress;
             CONFIG.API_KEY = apiKey;
+            CONFIG.CURRENCY = currency;
 
             // Save to localStorage
-            if (saveConfig({ WALLET_ADDRESS: walletAddress, API_KEY: apiKey })) {
+            if (saveConfig({ WALLET_ADDRESS: walletAddress, API_KEY: apiKey, CURRENCY: currency })) {
                 closeSettings();
                 // Reload data with new settings
                 loadData();
@@ -1201,9 +1257,41 @@
         }
 
         // Data processing function
+        // Enhanced transaction categorization
+        function categorizeTransaction(tx, walletAddress) {
+            const isReceived = tx.to.toLowerCase() === walletAddress.toLowerCase();
+            const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
+            
+            // Categorize based on amount patterns and timing
+            if (amount > 10000) {
+                return isReceived ? 'deposit' : 'withdrawal';
+            } else if (amount > 100) {
+                return isReceived ? 'trade_in' : 'trade_out';
+            } else {
+                return isReceived ? 'small_in' : 'small_out';
+            }
+        }
+
+        // Data processing function with advanced trading analysis
         function processTransactions(transactions) {
             if (!transactions || transactions.length === 0) {
-                throw new Error('No USDT transactions found');
+                return {
+                    dailyData: [],
+                    tradingDays: [],
+                    currentBalance: 0,
+                    totalDeposits: 0,
+                    totalWithdrawals: 0,
+                    totalTradingProfit: 0,
+                    avgDailyGrowth: 0,
+                    bestDay: 0,
+                    activeDays: 0,
+                    todayPnL: { tradingProfit: 0, tradingProfitPercent: 0 },
+                    lastTradingDayPnL: { tradingProfit: 0, tradingProfitPercent: 0 },
+                    startBalance: 0,
+                    endBalance: 0,
+                    totalGrowth: 0,
+                    totalGrowthPercent: 0
+                };
             }
 
             // Sort by timestamp (oldest first)
@@ -1211,8 +1299,8 @@
 
             const dailyData = new Map();
             let runningBalance = 0;
-
-            const dailyGrowthRates = [];
+            let totalDeposits = 0;
+            let totalWithdrawals = 0;
 
             // Process each transaction
             sortedTxs.forEach(tx => {
@@ -1220,57 +1308,106 @@
                 const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
                 const date = new Date(parseInt(tx.timeStamp) * 1000);
                 const dateKey = date.toISOString().split('T')[0];
+                const category = categorizeTransaction(tx, CONFIG.WALLET_ADDRESS);
 
+                // Update running balance
                 if (isReceived) {
                     runningBalance += amount;
                 } else {
                     runningBalance -= amount;
                 }
 
-                if (isReceived && amount > 100) { // Only track significant deposits
+                // Track deposits and withdrawals separately
+                if (category === 'deposit') {
+                    totalDeposits += amount;
+                } else if (category === 'withdrawal') {
+                    totalWithdrawals += amount;
+                }
+
+                // Initialize daily data if not exists
+                if (!dailyData.has(dateKey)) {
                     dailyData.set(dateKey, {
-                        balance: amount,
                         date: date,
-                        amount: amount
+                        startBalance: runningBalance - (isReceived ? amount : -amount),
+                        endBalance: runningBalance,
+                        trades: [],
+                        deposits: 0,
+                        withdrawals: 0,
+                        tradingProfit: 0,
+                        tradingProfitPercent: 0
+                    });
+                }
+
+                const dayData = dailyData.get(dateKey);
+                dayData.endBalance = runningBalance;
+
+                // Record transaction details
+                if (category === 'deposit') {
+                    dayData.deposits += amount;
+                } else if (category === 'withdrawal') {
+                    dayData.withdrawals += amount;
+                } else if (category.includes('trade')) {
+                    dayData.trades.push({
+                        amount: amount,
+                        type: isReceived ? 'in' : 'out',
+                        timestamp: parseInt(tx.timeStamp),
+                        hash: tx.hash
                     });
                 }
             });
 
-            // Convert to array and calculate growth rates
+            // Calculate daily P&L excluding deposits/withdrawals
             const dailyArray = Array.from(dailyData.entries())
-                .map(([dateKey, data]) => ({ dateKey, ...data }))
+                .map(([dateKey, data]) => {
+                    // Calculate trading profit (excluding deposits/withdrawals)
+                    const tradingBalance = data.endBalance - data.startBalance - data.deposits + data.withdrawals;
+                    const tradingProfitPercent = data.startBalance > 0 ? (tradingBalance / data.startBalance) * 100 : 0;
+                    
+                    return {
+                        dateKey,
+                        ...data,
+                        tradingProfit: tradingBalance,
+                        tradingProfitPercent: tradingProfitPercent,
+                        hasTrades: data.trades.length > 0,
+                        // Legacy compatibility
+                        amount: data.endBalance,
+                        growthRate: tradingProfitPercent
+                    };
+                })
                 .sort((a, b) => new Date(a.dateKey) - new Date(b.dateKey));
 
-            let previousAmount = 0;
-            dailyArray.forEach((day, index) => {
-                if (index === 0) {
-                    previousAmount = day.amount;
-                    day.growthRate = 0;
-                } else {
-                    const growthRate = previousAmount > 0 ? ((day.amount - previousAmount) / previousAmount) * 100 : 0;
-                    day.growthRate = growthRate;
-                    dailyGrowthRates.push(growthRate);
-                    previousAmount = day.amount;
-                }
-            });
+            // Calculate statistics
+            const tradingDays = dailyArray.filter(day => day.hasTrades);
+            const tradingProfits = tradingDays.map(day => day.tradingProfitPercent).filter(p => !isNaN(p));
+            
+            const currentBalance = runningBalance;
+            const totalTradingProfit = dailyArray.reduce((sum, day) => sum + day.tradingProfit, 0);
+            const avgDailyGrowth = tradingProfits.length > 0 ? 
+                tradingProfits.reduce((sum, p) => sum + p, 0) / tradingProfits.length : 0;
+            const bestDay = tradingProfits.length > 0 ? Math.max(...tradingProfits) : 0;
 
-            const startBalance = dailyArray[0]?.amount || 0;
-            const endBalance = dailyArray[dailyArray.length - 1]?.amount || 0;
-            const totalGrowth = endBalance - startBalance;
-            const totalGrowthPercent = startBalance > 0 ? (totalGrowth / startBalance) * 100 : 0;
-            const avgDailyGrowth = dailyGrowthRates.length > 0 ?
-                dailyGrowthRates.reduce((sum, rate) => sum + rate, 0) / dailyGrowthRates.length : 0;
-            const bestDay = Math.max(...dailyGrowthRates, 0);
+            // Get today's and last trading day data
+            const today = new Date().toISOString().split('T')[0];
+            const todayData = dailyArray.find(day => day.dateKey === today) || { tradingProfit: 0, tradingProfitPercent: 0 };
+            const lastTradingDay = tradingDays.length > 0 ? tradingDays[tradingDays.length - 1] : { tradingProfit: 0, tradingProfitPercent: 0 };
 
             return {
                 dailyData: dailyArray,
-                startBalance,
-                endBalance,
-                totalGrowth,
-                totalGrowthPercent,
+                tradingDays: tradingDays,
+                currentBalance,
+                totalDeposits,
+                totalWithdrawals,
+                totalTradingProfit,
                 avgDailyGrowth,
                 bestDay,
-                activeDays: dailyArray.length
+                activeDays: tradingDays.length,
+                todayPnL: todayData,
+                lastTradingDayPnL: lastTradingDay,
+                // Legacy compatibility
+                startBalance: totalDeposits,
+                endBalance: currentBalance,
+                totalGrowth: totalTradingProfit,
+                totalGrowthPercent: totalDeposits > 0 ? (totalTradingProfit / totalDeposits) * 100 : 0
             };
         }
 
@@ -1612,7 +1749,19 @@
             document.getElementById('optimisticPrediction').textContent = formatCurrency(predictions.predictions.optimistic.balance);
             document.getElementById('optimisticGrowth').textContent = formatPercentage(predictions.predictions.optimistic.growth);
 
+            // Update new Trading Performance metrics
+            if (document.getElementById('currentBalanceDisplay')) {
+                document.getElementById('currentBalanceDisplay').textContent = formatCurrency(data.currentBalance);
+                document.getElementById('todayPnL').textContent = formatPnL(data.todayPnL.tradingProfit, data.todayPnL.tradingProfitPercent);
+                document.getElementById('lastTradingDayPnL').textContent = formatPnL(data.lastTradingDayPnL.tradingProfit, data.lastTradingDayPnL.tradingProfitPercent);
 
+                // Apply color classes based on P&L
+                const todayPnLEl = document.getElementById('todayPnL');
+                const lastDayPnLEl = document.getElementById('lastTradingDayPnL');
+                
+                todayPnLEl.className = 'metric-value ' + (data.todayPnL.tradingProfit >= 0 ? 'positive' : 'negative');
+                lastDayPnLEl.className = 'metric-value ' + (data.lastTradingDayPnL.tradingProfit >= 0 ? 'positive' : 'negative');
+            }
         }
 
 
@@ -1674,14 +1823,14 @@
         setInterval(loadData, 5 * 60 * 1000);
 
         // Close modal with Escape key
-        document.addEventListener('keydown', function(event) {
+        document.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
                 closeSettings();
             }
         });
 
         // Close modal when clicking outside
-        document.getElementById('settingsModal').addEventListener('click', function(event) {
+        document.getElementById('settingsModal').addEventListener('click', function (event) {
             if (event.target === this) {
                 closeSettings();
             }
