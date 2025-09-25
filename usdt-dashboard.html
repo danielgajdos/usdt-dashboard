@@ -1089,9 +1089,13 @@
         </div>
 
         <div class="last-updated" id="lastUpdated"></div>
+        
+        <div class="exchange-rate-info" id="exchangeRateInfo" style="text-align: center; color: var(--text-muted); font-size: 0.75rem; margin-top: 8px; padding: 0 20px;">
+            💱 Exchange Rate: Loading...
+        </div>
 
         <div
-            style="text-align: center; color: var(--text-muted); font-size: 0.75rem; margin-top: 16px; padding: 0 20px;">
+            style="text-align: center; color: var(--text-muted); font-size: 0.75rem; margin-top: 8px; padding: 0 20px;">
             💡 All predictions include 10% trader fee deduction from total profits at year-end
         </div>
     </div>
@@ -1119,6 +1123,46 @@
             return DEFAULT_CONFIG;
         }
 
+        // Exchange rate cache
+        let exchangeRates = {
+            USD: 1.0, // USDT is pegged to USD
+            EUR: 0.85, // Default fallback
+            lastUpdated: 0
+        };
+
+        // Fetch current exchange rates
+        async function fetchExchangeRates() {
+            try {
+                // Check if rates are fresh (less than 5 minutes old)
+                const now = Date.now();
+                if (now - exchangeRates.lastUpdated < 5 * 60 * 1000) {
+                    return exchangeRates;
+                }
+
+                console.log('🔄 Fetching current exchange rates...');
+                
+                // Use a free exchange rate API
+                const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+                const data = await response.json();
+                
+                if (data && data.rates) {
+                    exchangeRates = {
+                        USD: 1.0, // USDT is pegged to USD
+                        EUR: data.rates.EUR || 0.85,
+                        lastUpdated: now
+                    };
+                    
+                    console.log(`💱 Exchange rates updated: 1 USD = ${exchangeRates.EUR.toFixed(4)} EUR`);
+                } else {
+                    console.warn('⚠️ Invalid exchange rate data, using cached rates');
+                }
+            } catch (error) {
+                console.warn('⚠️ Failed to fetch exchange rates, using cached rates:', error.message);
+            }
+            
+            return exchangeRates;
+        }
+
         // Save configuration to localStorage
         function saveConfig(config) {
             try {
@@ -1134,26 +1178,34 @@
 
         let balanceChart, growthChart;
 
-        // Utility functions
-        function formatCurrency(amount, currency = null) {
+        // Utility functions with proper currency conversion
+        function formatCurrency(usdtAmount, currency = null) {
             const curr = currency || CONFIG.CURRENCY || 'USD';
+            
+            // Convert USDT to target currency
+            let convertedAmount = usdtAmount;
+            if (curr === 'EUR') {
+                convertedAmount = usdtAmount * exchangeRates.EUR;
+            }
+            // USD stays the same since USDT ≈ USD
+            
             const locale = curr === 'EUR' ? 'de-DE' : 'en-US';
             return new Intl.NumberFormat(locale, {
                 style: 'currency',
                 currency: curr,
                 minimumFractionDigits: 2
-            }).format(amount);
+            }).format(convertedAmount);
         }
 
-        function formatPnL(amount, percentage, currency = null) {
+        function formatPnL(usdtAmount, percentage, currency = null) {
             const curr = currency || CONFIG.CURRENCY || 'USD';
-            const amountStr = formatCurrency(amount, curr);
+            const amountStr = formatCurrency(usdtAmount, curr);
             const sign = percentage >= 0 ? '+' : '';
 
-            // Add both USD and EUR values for tooltips
-            const usdAmount = formatCurrency(amount, 'USD');
-            const eurAmount = formatCurrency(amount, 'EUR');
-            const tooltip = `${usdAmount} / ${eurAmount}`;
+            // Show tooltip with both currencies for reference (properly converted)
+            const usdAmount = formatCurrency(usdtAmount, 'USD');
+            const eurAmount = formatCurrency(usdtAmount, 'EUR');
+            const tooltip = `${usdAmount} / ${eurAmount} (Rate: 1 USD = ${exchangeRates.EUR.toFixed(4)} EUR)`;
 
             return `<span title="${tooltip}">${amountStr} (${sign}${percentage.toFixed(2)}%)</span>`;
         }
@@ -1894,9 +1946,9 @@
                             callbacks: {
                                 label: function (context) {
                                     const percentage = context.parsed.y.toFixed(2);
-                                    const currencyAmount = currencyData[context.dataIndex];
+                                    const usdtAmount = currencyData[context.dataIndex];
                                     const selectedCurrency = CONFIG.CURRENCY || 'USD';
-                                    const formattedAmount = formatCurrency(currencyAmount, selectedCurrency);
+                                    const formattedAmount = formatCurrency(usdtAmount, selectedCurrency);
                                     return [
                                         `Growth: ${percentage}%`,
                                         `Amount: ${formattedAmount}`
@@ -1946,7 +1998,7 @@
             document.getElementById('startingAmount').textContent = formatCurrency(data.startBalance);
             document.getElementById('totalGrowth').textContent = formatCurrency(data.totalGrowth);
             document.getElementById('growthPercentage').textContent = formatPercentage(data.totalGrowthPercent);
-            
+
             // Calculate current trader fee (10% of profit)
             const currentTraderFee = Math.max(0, data.totalGrowth * 0.10);
             document.getElementById('currentTraderFee').textContent = '-' + formatCurrency(currentTraderFee);
@@ -2001,6 +2053,9 @@
                 dashboardEl.style.display = 'none';
                 chartsEl.style.display = 'none';
 
+                // Fetch exchange rates first
+                await fetchExchangeRates();
+                
                 const transactions = await fetchTransactions();
                 const data = processTransactions(transactions);
                 const predictions = calculatePredictions(data.endBalance, data.avgDailyGrowth, data.startBalance);
@@ -2015,6 +2070,16 @@
 
                 document.getElementById('lastUpdated').textContent =
                     `Last updated: ${new Date().toLocaleString()}`;
+                
+                // Update exchange rate info
+                const selectedCurrency = CONFIG.CURRENCY || 'USD';
+                if (selectedCurrency === 'EUR') {
+                    document.getElementById('exchangeRateInfo').textContent = 
+                        `💱 Exchange Rate: 1 USDT = ${exchangeRates.EUR.toFixed(4)} EUR`;
+                } else {
+                    document.getElementById('exchangeRateInfo').textContent = 
+                        `💱 Exchange Rate: 1 USDT ≈ 1.00 USD (pegged)`;
+                }
 
             } catch (error) {
                 console.error('Error loading data:', error);
