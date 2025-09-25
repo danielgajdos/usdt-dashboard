@@ -1176,6 +1176,94 @@
 
         let CONFIG = loadConfig();
 
+        // Special analysis function for wallet 0x1C34183e8D11Ad41c9D7a50856cf961dfae55862
+        function performSpecialWalletAnalysis(transactions, userWallet) {
+            if (userWallet.toLowerCase() !== '0x1c34183e8d11ad41c9d7a50856cf961dfae55862') {
+                return; // Only run for the specific wallet
+            }
+            
+            console.log(`\n🎯 SPECIAL ANALYSIS FOR WALLET: ${userWallet}`);
+            console.log(`🔍 Analyzing ${transactions.length} transactions to identify deposit/withdrawal patterns...`);
+            
+            const sortedTxs = transactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
+            
+            // Find the VERY FIRST transaction (receive or send)
+            const firstTx = sortedTxs[0];
+            if (firstTx) {
+                const isFirstReceive = firstTx.to.toLowerCase() === userWallet.toLowerCase();
+                const firstWallet = (isFirstReceive ? firstTx.from : firstTx.to).toLowerCase();
+                const firstAmount = parseFloat(firstTx.value) / Math.pow(10, parseInt(firstTx.tokenDecimal));
+                const firstDate = new Date(parseInt(firstTx.timeStamp) * 1000);
+                
+                console.log(`\n🥇 FIRST TRANSACTION EVER:`);
+                console.log(`   Type: ${isFirstReceive ? 'RECEIVE' : 'SEND'}`);
+                console.log(`   ${isFirstReceive ? 'From' : 'To'}: ${firstWallet}`);
+                console.log(`   Amount: $${firstAmount.toFixed(2)}`);
+                console.log(`   Date: ${firstDate.toLocaleDateString()} ${firstDate.toLocaleTimeString()}`);
+                console.log(`   Hash: ${firstTx.hash}`);
+                
+                if (isFirstReceive) {
+                    console.log(`\n💡 ANALYSIS: First transaction is a RECEIVE`);
+                    console.log(`   This suggests wallet ${firstWallet.substring(0, 10)}... is the INITIAL FUNDING source`);
+                } else {
+                    console.log(`\n💡 ANALYSIS: First transaction is a SEND`);
+                    console.log(`   This suggests the wallet was funded before this transaction history`);
+                }
+            }
+            
+            // Analyze all unique wallets and their patterns
+            const walletAnalysis = new Map();
+            
+            sortedTxs.forEach((tx, index) => {
+                const isReceive = tx.to.toLowerCase() === userWallet.toLowerCase();
+                const externalWallet = (isReceive ? tx.from : tx.to).toLowerCase();
+                const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
+                
+                if (!walletAnalysis.has(externalWallet)) {
+                    walletAnalysis.set(externalWallet, {
+                        receives: [],
+                        sends: [],
+                        firstSeen: parseInt(tx.timeStamp),
+                        lastSeen: parseInt(tx.timeStamp)
+                    });
+                }
+                
+                const analysis = walletAnalysis.get(externalWallet);
+                analysis.lastSeen = Math.max(analysis.lastSeen, parseInt(tx.timeStamp));
+                
+                if (isReceive) {
+                    analysis.receives.push({ amount, timestamp: parseInt(tx.timeStamp), hash: tx.hash });
+                } else {
+                    analysis.sends.push({ amount, timestamp: parseInt(tx.timeStamp), hash: tx.hash });
+                }
+            });
+            
+            console.log(`\n📊 WALLET PATTERN ANALYSIS:`);
+            walletAnalysis.forEach((analysis, wallet) => {
+                const totalReceives = analysis.receives.length;
+                const totalSends = analysis.sends.length;
+                const totalReceiveAmount = analysis.receives.reduce((sum, tx) => sum + tx.amount, 0);
+                const totalSendAmount = analysis.sends.reduce((sum, tx) => sum + tx.amount, 0);
+                const firstSeenDate = new Date(analysis.firstSeen * 1000);
+                const lastSeenDate = new Date(analysis.lastSeen * 1000);
+                
+                console.log(`\n🔍 ${wallet.substring(0, 10)}...${wallet.substring(wallet.length - 6)}`);
+                console.log(`   📥 Receives: ${totalReceives} txs, $${totalReceiveAmount.toFixed(2)}`);
+                console.log(`   📤 Sends: ${totalSends} txs, $${totalSendAmount.toFixed(2)}`);
+                console.log(`   📅 Active: ${firstSeenDate.toLocaleDateString()} - ${lastSeenDate.toLocaleDateString()}`);
+                console.log(`   💰 Net: $${(totalReceiveAmount - totalSendAmount).toFixed(2)}`);
+                
+                // Pattern identification
+                if (totalReceives > 0 && totalSends > 0) {
+                    console.log(`   🏷️  PATTERN: BIDIRECTIONAL (Trading Platform)`);
+                } else if (totalReceives > 0 && totalSends === 0) {
+                    console.log(`   🏷️  PATTERN: DEPOSIT ONLY (Funding Source)`);
+                } else if (totalSends > 0 && totalReceives === 0) {
+                    console.log(`   🏷️  PATTERN: WITHDRAWAL ONLY (Destination)`);
+                }
+            });
+        }
+
         let balanceChart, growthChart;
 
         // Utility functions with proper currency conversion
@@ -1325,16 +1413,28 @@
         function analyzeWalletPatterns(transactions, userWallet) {
             const walletTypes = new Map();
             const sortedTxs = transactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
-
-            // Find the first deposit (incoming transaction) - this wallet is for initial funding
-            const firstDeposit = sortedTxs.find(tx =>
+            
+            console.log(`🔍 DETAILED ANALYSIS for wallet: ${userWallet}`);
+            console.log(`📊 Total transactions: ${transactions.length}`);
+            
+            // Find the FIRST RECEIVE transaction to identify initial funding source
+            const firstReceive = sortedTxs.find(tx =>
                 tx.to.toLowerCase() === userWallet.toLowerCase()
             );
-
-            if (firstDeposit) {
-                const initialFundingWallet = firstDeposit.from.toLowerCase();
-                walletTypes.set(initialFundingWallet, 'initial_funding');
-                console.log(`💰 Initial funding wallet: ${initialFundingWallet}`);
+            
+            if (firstReceive) {
+                const firstReceiveWallet = firstReceive.from.toLowerCase();
+                const firstReceiveAmount = parseFloat(firstReceive.value) / Math.pow(10, parseInt(firstReceive.tokenDecimal));
+                const firstReceiveDate = new Date(parseInt(firstReceive.timeStamp) * 1000);
+                
+                console.log(`🎯 FIRST RECEIVE TRANSACTION:`);
+                console.log(`   From: ${firstReceiveWallet}`);
+                console.log(`   Amount: $${firstReceiveAmount.toFixed(2)}`);
+                console.log(`   Date: ${firstReceiveDate.toLocaleDateString()}`);
+                console.log(`   Hash: ${firstReceive.hash}`);
+                
+                walletTypes.set(firstReceiveWallet, 'initial_funding');
+                console.log(`💰 Marked as INITIAL FUNDING wallet: ${firstReceiveWallet.substring(0, 10)}...`);
             }
 
             // Analyze transaction patterns for each external wallet
@@ -1374,16 +1474,33 @@
                 });
             });
 
-            // Categorize wallets based on patterns
+            // DETAILED WALLET ANALYSIS
+            console.log(`\n📋 WALLET ANALYSIS RESULTS:`);
+            console.log(`Found ${walletStats.size} unique external wallets`);
+            
             walletStats.forEach((stats, wallet) => {
-                if (walletTypes.has(wallet)) return; // Already categorized (initial funding wallet)
+                const totalTxs = stats.inCount + stats.outCount;
+                const firstSeenDate = new Date(stats.firstSeen * 1000);
+                
+                console.log(`\n🔍 Wallet: ${wallet.substring(0, 10)}...${wallet.substring(wallet.length - 6)}`);
+                console.log(`   📥 Incoming: ${stats.inCount} txs, $${stats.totalIn.toFixed(2)}`);
+                console.log(`   📤 Outgoing: ${stats.outCount} txs, $${stats.totalOut.toFixed(2)}`);
+                console.log(`   📊 Total: ${totalTxs} txs, $${(stats.totalIn + stats.totalOut).toFixed(2)}`);
+                console.log(`   📅 First seen: ${firstSeenDate.toLocaleDateString()}`);
+                console.log(`   💰 Net flow: $${(stats.totalIn - stats.totalOut).toFixed(2)}`);
+            });
+
+            // Categorize wallets based on patterns
+            console.log(`\n🏷️  WALLET CATEGORIZATION:`);
+            walletStats.forEach((stats, wallet) => {
+                if (walletTypes.has(wallet)) {
+                    console.log(`   ✅ ${wallet.substring(0, 10)}... already categorized as: ${walletTypes.get(wallet)}`);
+                    return; // Already categorized (initial funding wallet)
+                }
 
                 const totalTxs = stats.inCount + stats.outCount;
 
-                // Key insight: Trading wallets have BOTH incoming and outgoing transactions
-                // Pure withdrawal wallets only have outgoing transactions
-                // Pure deposit wallets only have incoming transactions
-
+                // Enhanced categorization logic based on transaction patterns
                 if (stats.inCount > 0 && stats.outCount > 0) {
                     // Has both in and out transactions = trading wallet
                     walletTypes.set(wallet, 'trading');
@@ -1410,10 +1527,29 @@
             const isReceived = tx.to.toLowerCase() === walletAddress.toLowerCase();
             const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
             const externalWallet = (isReceived ? tx.from : tx.to).toLowerCase();
-
-            // SUPER SIMPLE: Treat ALL transactions as trading for now
-            const category = isReceived ? 'trade_in' : 'trade_out';
-            console.log(`🔄 ${category}: $${amount.toFixed(2)} from/to ${externalWallet.substring(0, 10)}...`);
+            const walletType = walletTypes.get(externalWallet) || 'trading';
+            
+            // Categorize based on wallet analysis
+            let category;
+            switch (walletType) {
+                case 'initial_funding':
+                    category = isReceived ? 'deposit' : 'withdrawal';
+                    console.log(`💰 ${category}: $${amount.toFixed(2)} from/to INITIAL FUNDING wallet ${externalWallet.substring(0, 10)}...`);
+                    break;
+                case 'deposit':
+                    category = isReceived ? 'deposit' : 'trade_out';
+                    console.log(`📥 ${category}: $${amount.toFixed(2)} from/to DEPOSIT wallet ${externalWallet.substring(0, 10)}...`);
+                    break;
+                case 'withdrawal':
+                    category = isReceived ? 'trade_in' : 'withdrawal';
+                    console.log(`📤 ${category}: $${amount.toFixed(2)} from/to WITHDRAWAL wallet ${externalWallet.substring(0, 10)}...`);
+                    break;
+                case 'trading':
+                default:
+                    category = isReceived ? 'trade_in' : 'trade_out';
+                    console.log(`🔄 ${category}: $${amount.toFixed(2)} from/to TRADING wallet ${externalWallet.substring(0, 10)}...`);
+                    break;
+            }
             return category;
         }
 
@@ -1441,6 +1577,9 @@
 
             // Sort by timestamp (oldest first)
             const sortedTxs = transactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
+
+            // Run special analysis for the specific wallet
+            performSpecialWalletAnalysis(sortedTxs, CONFIG.WALLET_ADDRESS);
 
             // Analyze wallet patterns to identify deposit/withdrawal vs trading wallets
             const walletTypes = analyzeWalletPatterns(sortedTxs, CONFIG.WALLET_ADDRESS);
