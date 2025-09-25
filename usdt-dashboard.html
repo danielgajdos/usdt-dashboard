@@ -1442,44 +1442,70 @@
                 }
             });
 
-            // Calculate daily P&L excluding deposits/withdrawals
+            // Calculate daily balances and P&L based on received amounts (trading session closures)
             const dailyArray = Array.from(dailyData.entries())
                 .map(([dateKey, data]) => {
-                    // Calculate net trading result for the day
-                    const tradeInAmount = data.trades
+                    // Daily received = when trading sessions close (profit/loss realized)
+                    const dailyReceived = data.trades
                         .filter(t => t.type === 'in')
                         .reduce((sum, t) => sum + t.amount, 0);
-                    const tradeOutAmount = data.trades
+                    
+                    // Daily sent = when trading sessions open (capital deployed)
+                    const dailySent = data.trades
                         .filter(t => t.type === 'out')
                         .reduce((sum, t) => sum + t.amount, 0);
-
-                    // Trading profit is the net result of trades (in - out)
-                    const tradingProfit = tradeInAmount - tradeOutAmount;
-
-                    // Calculate percentage based on the balance at start of day (excluding deposits)
-                    const baseBalance = data.startBalance + data.deposits - data.withdrawals;
-                    const tradingProfitPercent = baseBalance > 0 ? (tradingProfit / baseBalance) * 100 : 0;
 
                     return {
                         dateKey,
                         ...data,
-                        tradingProfit: tradingProfit,
-                        tradingProfitPercent: tradingProfitPercent,
-                        tradeInAmount,
-                        tradeOutAmount,
+                        dailyReceived,
+                        dailySent,
                         hasTrades: data.trades.length > 0,
-                        // Legacy compatibility
-                        amount: data.endBalance,
-                        growthRate: tradingProfitPercent
+                        // Will calculate P&L after sorting
+                        tradingProfit: 0,
+                        tradingProfitPercent: 0,
+                        cumulativeBalance: 0
                     };
                 })
                 .sort((a, b) => new Date(a.dateKey) - new Date(b.dateKey));
 
-            // Calculate statistics
-            const tradingDays = dailyArray.filter(day => day.hasTrades);
-            const tradingProfits = tradingDays.map(day => day.tradingProfitPercent).filter(p => !isNaN(p));
+            // Calculate cumulative balances and daily P&L
+            let cumulativeBalance = 0;
+            let previousDayReceived = 0;
+            
+            dailyArray.forEach((day, index) => {
+                // Cumulative balance = sum of all received amounts up to this date
+                cumulativeBalance += day.dailyReceived;
+                day.cumulativeBalance = cumulativeBalance;
+                
+                // Daily P&L = today's received - previous day's received
+                if (index === 0) {
+                    day.tradingProfit = day.dailyReceived; // First day profit = received amount
+                    day.tradingProfitPercent = 0; // No previous day to compare
+                } else {
+                    day.tradingProfit = day.dailyReceived - previousDayReceived;
+                    day.tradingProfitPercent = previousDayReceived > 0 ? (day.tradingProfit / previousDayReceived) * 100 : 0;
+                }
+                
+                // Update for next iteration
+                if (day.dailyReceived > 0) {
+                    previousDayReceived = day.dailyReceived;
+                }
+                
+                // Legacy compatibility
+                day.growthRate = day.tradingProfitPercent;
+                day.amount = day.cumulativeBalance; // Total balance up to this date
+                
+                if (day.hasTrades) {
+                    console.log(`📅 ${day.dateKey}: Received $${day.dailyReceived.toFixed(2)}, Sent $${day.dailySent.toFixed(2)}, P&L: $${day.tradingProfit.toFixed(2)} (${day.tradingProfitPercent.toFixed(2)}%), Balance: $${day.cumulativeBalance.toFixed(2)}`);
+                }
+            });
 
-            const currentBalance = runningBalance;
+            // Calculate statistics based on received amounts
+            const tradingDays = dailyArray.filter(day => day.hasTrades && day.dailyReceived > 0);
+            const tradingProfits = tradingDays.map(day => day.tradingProfitPercent).filter(p => !isNaN(p) && isFinite(p));
+
+            const currentBalance = cumulativeBalance; // Latest cumulative balance
             const totalTradingProfit = dailyArray.reduce((sum, day) => sum + day.tradingProfit, 0);
             const avgDailyGrowth = tradingProfits.length > 0 ?
                 tradingProfits.reduce((sum, p) => sum + p, 0) / tradingProfits.length : 0;
@@ -1487,23 +1513,36 @@
 
             // Get today's and last trading day data
             const today = new Date().toISOString().split('T')[0];
-            const todayData = dailyArray.find(day => day.dateKey === today) || { tradingProfit: 0, tradingProfitPercent: 0 };
-            const lastTradingDay = tradingDays.length > 0 ? tradingDays[tradingDays.length - 1] : { tradingProfit: 0, tradingProfitPercent: 0 };
+            const todayData = dailyArray.find(day => day.dateKey === today) || { 
+                tradingProfit: 0, 
+                tradingProfitPercent: 0, 
+                dailyReceived: 0,
+                dailySent: 0 
+            };
+            const lastTradingDay = tradingDays.length > 0 ? tradingDays[tradingDays.length - 1] : { 
+                tradingProfit: 0, 
+                tradingProfitPercent: 0,
+                dailyReceived: 0,
+                dailySent: 0 
+            };
 
             // Debug logging
+            console.log(`📊 TRADING ANALYSIS SUMMARY:`);
             console.log(`Processed ${sortedTxs.length} transactions`);
-            console.log(`Found ${tradingDays.length} trading days`);
-            console.log(`Total deposits: ${totalDeposits}, Total withdrawals: ${totalWithdrawals}`);
-            console.log(`Current balance: ${currentBalance}`);
-            console.log(`Today's P&L: ${todayData.tradingProfit} (${todayData.tradingProfitPercent}%)`);
-            console.log(`Last trading day P&L: ${lastTradingDay.tradingProfit} (${lastTradingDay.tradingProfitPercent}%)`);
+            console.log(`Found ${tradingDays.length} trading days with received amounts`);
+            console.log(`Current balance (cumulative received): $${currentBalance.toFixed(2)}`);
+            console.log(`Today's received: $${todayData.dailyReceived.toFixed(2)}, sent: $${todayData.dailySent.toFixed(2)}`);
+            console.log(`Today's P&L: $${todayData.tradingProfit.toFixed(2)} (${todayData.tradingProfitPercent.toFixed(2)}%)`);
+            console.log(`Last trading day P&L: $${lastTradingDay.tradingProfit.toFixed(2)} (${lastTradingDay.tradingProfitPercent.toFixed(2)}%)`);
+            console.log(`Average daily growth: ${avgDailyGrowth.toFixed(2)}%`);
 
             if (tradingDays.length > 0) {
-                console.log('Recent trading days:', tradingDays.slice(-3).map(d => ({
+                console.log('📈 Recent trading days:', tradingDays.slice(-5).map(d => ({
                     date: d.dateKey,
-                    profit: d.tradingProfit,
-                    percent: d.tradingProfitPercent,
-                    trades: d.trades.length
+                    received: `$${d.dailyReceived.toFixed(2)}`,
+                    sent: `$${d.dailySent.toFixed(2)}`,
+                    profit: `$${d.tradingProfit.toFixed(2)}`,
+                    percent: `${d.tradingProfitPercent.toFixed(2)}%`
                 })));
             }
 
