@@ -1420,7 +1420,7 @@
                 // Smart categorization based on transaction patterns:
                 // 1. Bidirectional flow = Trading platform (exchanges, DEXs)
                 // 2. Unidirectional flow = Deposit/Withdrawal wallets (personal wallets, banks)
-                
+
                 if (stats.inCount > 0 && stats.outCount > 0) {
                     // Bidirectional transactions = Trading platform
                     walletTypes.set(wallet, 'trading');
@@ -1462,7 +1462,7 @@
                     // Deposit-only wallets: Only send funds to user (like banks, personal wallets)
                     // Receiving from these = deposit, Sending to these = unusual (treat as trade)
                     category = isReceived ? 'deposit' : 'trade_out';
-                    console.log(`� ${categorry}: $${amount.toFixed(2)} from/to DEPOSIT-ONLY wallet ${externalWallet.substring(0, 10)}...`);
+                    console.log(`📥 ${category}: $${amount.toFixed(2)} from/to DEPOSIT-ONLY wallet ${externalWallet.substring(0, 10)}...`);
                     break;
                 case 'withdrawal':
                     // Withdrawal-only wallets: Only receive funds from user (destinations)
