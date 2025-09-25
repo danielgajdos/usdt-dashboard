@@ -1554,7 +1554,9 @@
                 dailyReceived: 0,
                 dailySent: 0
             };
-            const lastTradingDay = tradingDays.length > 0 ? tradingDays[tradingDays.length - 1] : {
+            // Get last trading day that's NOT today
+            const tradingDaysExcludingToday = tradingDays.filter(day => day.dateKey !== today);
+            const lastTradingDay = tradingDaysExcludingToday.length > 0 ? tradingDaysExcludingToday[tradingDaysExcludingToday.length - 1] : {
                 tradingProfit: 0,
                 tradingProfitPercent: 0,
                 dailyReceived: 0,
@@ -1568,7 +1570,7 @@
             console.log(`Current balance (cumulative received): $${currentBalance.toFixed(2)}`);
             console.log(`Today's received: $${todayData.dailyReceived.toFixed(2)}, sent: $${todayData.dailySent.toFixed(2)}`);
             console.log(`Today's P&L: $${todayData.tradingProfit.toFixed(2)} (${todayData.tradingProfitPercent.toFixed(2)}%)`);
-            console.log(`Last trading day P&L: $${lastTradingDay.tradingProfit.toFixed(2)} (${lastTradingDay.tradingProfitPercent.toFixed(2)}%)`);
+            console.log(`Last trading day (${lastTradingDay.dateKey || 'none'}): $${lastTradingDay.tradingProfit.toFixed(2)} (${lastTradingDay.tradingProfitPercent.toFixed(2)}%)`);
             console.log(`Average daily growth: ${avgDailyGrowth.toFixed(2)}%`);
 
             if (tradingDays.length > 0) {
@@ -1886,7 +1888,7 @@
                             cornerRadius: 8,
                             displayColors: true,
                             callbacks: {
-                                label: function(context) {
+                                label: function (context) {
                                     const percentage = context.parsed.y.toFixed(2);
                                     const currencyAmount = currencyData[context.dataIndex];
                                     const usdAmount = formatCurrency(currencyAmount, 'USD');
