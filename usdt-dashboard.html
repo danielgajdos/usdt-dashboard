@@ -1145,12 +1145,12 @@
             const curr = currency || CONFIG.CURRENCY || 'USD';
             const amountStr = formatCurrency(amount, curr);
             const sign = percentage >= 0 ? '+' : '';
-            
+
             // Add both USD and EUR values for tooltips
             const usdAmount = formatCurrency(amount, 'USD');
             const eurAmount = formatCurrency(amount, 'EUR');
             const tooltip = `${usdAmount} / ${eurAmount}`;
-            
+
             return `<span title="${tooltip}">${amountStr} (${sign}${percentage.toFixed(2)}%)</span>`;
         }
 
@@ -1510,35 +1510,36 @@
             // Calculate proper statistics
             const tradingDays = dailyArray.filter(day => day.hasTrades && day.dailyReceived > 0);
             const daysWithReceived = dailyArray.filter(day => day.dailyReceived > 0);
-            
+
             // Starting amount = first received amount
             const startingAmount = daysWithReceived.length > 0 ? daysWithReceived[0].dailyReceived : 0;
-            
+
             // Current balance = latest received amount (today's balance)
             const latestDay = daysWithReceived.length > 0 ? daysWithReceived[daysWithReceived.length - 1] : null;
             const currentBalance = latestDay ? latestDay.dailyReceived : 0;
-            
+
             // Total growth = current - starting
             const totalTradingProfit = currentBalance - startingAmount;
             const totalGrowthPercent = startingAmount > 0 ? (totalTradingProfit / startingAmount) * 100 : 0;
-            
-            // Recalculate daily P&L properly
+
+            // Recalculate daily P&L properly (day-to-day changes)
             daysWithReceived.forEach((day, index) => {
                 if (index === 0) {
                     day.tradingProfit = 0; // First day has no profit
                     day.tradingProfitPercent = 0;
                 } else {
-                    day.tradingProfit = day.dailyReceived - startingAmount;
-                    day.tradingProfitPercent = startingAmount > 0 ? (day.tradingProfit / startingAmount) * 100 : 0;
+                    const previousDay = daysWithReceived[index - 1];
+                    day.tradingProfit = day.dailyReceived - previousDay.dailyReceived;
+                    day.tradingProfitPercent = previousDay.dailyReceived > 0 ? (day.tradingProfit / previousDay.dailyReceived) * 100 : 0;
                 }
                 day.growthRate = day.tradingProfitPercent;
             });
-            
+
             const tradingProfits = daysWithReceived.slice(1).map(day => day.tradingProfitPercent).filter(p => !isNaN(p) && isFinite(p));
             const avgDailyGrowth = tradingProfits.length > 0 ?
                 tradingProfits.reduce((sum, p) => sum + p, 0) / tradingProfits.length : 0;
             const bestDay = tradingProfits.length > 0 ? Math.max(...tradingProfits) : 0;
-            
+
             console.log(`💰 CORRECTED CALCULATIONS:`);
             console.log(`Starting amount: $${startingAmount.toFixed(2)}`);
             console.log(`Current balance: $${currentBalance.toFixed(2)}`);
@@ -1845,7 +1846,8 @@
             }
 
             const labels = dailyData.slice(1).map(d => new Date(d.dateKey).toLocaleDateString());
-            const data = dailyData.slice(1).map(d => d.growthRate);
+            const percentageData = dailyData.slice(1).map(d => d.growthRate);
+            const currencyData = dailyData.slice(1).map(d => d.tradingProfit);
 
             growthChart = new Chart(ctx, {
                 type: 'bar',
@@ -1853,9 +1855,9 @@
                     labels: labels,
                     datasets: [{
                         label: 'Daily Growth (%)',
-                        data: data,
-                        backgroundColor: data.map(value => value >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'),
-                        borderColor: data.map(value => value >= 0 ? '#10b981' : '#ef4444'),
+                        data: percentageData,
+                        backgroundColor: percentageData.map(value => value >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'),
+                        borderColor: percentageData.map(value => value >= 0 ? '#10b981' : '#ef4444'),
                         borderWidth: 2,
                         borderRadius: 6,
                         borderSkipped: false
@@ -1872,6 +1874,28 @@
                                     family: 'Inter',
                                     size: 12,
                                     weight: '500'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#a1a1aa',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            callbacks: {
+                                label: function(context) {
+                                    const percentage = context.parsed.y.toFixed(2);
+                                    const currencyAmount = currencyData[context.dataIndex];
+                                    const usdAmount = formatCurrency(currencyAmount, 'USD');
+                                    const eurAmount = formatCurrency(currencyAmount, 'EUR');
+                                    return [
+                                        `Growth: ${percentage}%`,
+                                        `Amount: ${usdAmount}`,
+                                        `Amount: ${eurAmount}`
+                                    ];
                                 }
                             }
                         }
