@@ -1317,11 +1317,11 @@
                 if (walletTypes.has(wallet)) return; // Already categorized (initial funding wallet)
 
                 const totalTxs = stats.inCount + stats.outCount;
-                
+
                 // Key insight: Trading wallets have BOTH incoming and outgoing transactions
                 // Pure withdrawal wallets only have outgoing transactions
                 // Pure deposit wallets only have incoming transactions
-                
+
                 if (stats.inCount > 0 && stats.outCount > 0) {
                     // Has both in and out transactions = trading wallet
                     walletTypes.set(wallet, 'trading');
@@ -1346,22 +1346,13 @@
 
         function categorizeTransaction(tx, walletAddress, walletTypes) {
             const isReceived = tx.to.toLowerCase() === walletAddress.toLowerCase();
+            const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
             const externalWallet = (isReceived ? tx.from : tx.to).toLowerCase();
-            const walletType = walletTypes.get(externalWallet) || 'trading'; // Default to trading
 
-            // Handle different wallet types
-            switch (walletType) {
-                case 'deposit_withdrawal':
-                case 'initial_funding':
-                    return isReceived ? 'deposit' : 'withdrawal';
-                case 'deposit':
-                    return isReceived ? 'deposit' : 'trade_out'; // Shouldn't happen but handle gracefully
-                case 'withdrawal':
-                    return isReceived ? 'trade_in' : 'withdrawal'; // Shouldn't happen but handle gracefully
-                case 'trading':
-                default:
-                    return isReceived ? 'trade_in' : 'trade_out';
-            }
+            // SUPER SIMPLE: Treat ALL transactions as trading for now
+            const category = isReceived ? 'trade_in' : 'trade_out';
+            console.log(`🔄 ${category}: $${amount.toFixed(2)} from/to ${externalWallet.substring(0, 10)}...`);
+            return category;
         }
 
         // Data processing function with advanced trading analysis
