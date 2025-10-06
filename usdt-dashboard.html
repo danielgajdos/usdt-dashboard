@@ -1080,6 +1080,15 @@
                         </select>
                         <small>Choose your preferred currency for profit/loss calculations</small>
                     </div>
+                    <div class="setting-group">
+                        <label>Wallet Categorization:</label>
+                        <div id="walletCategorizationList" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; background: var(--bg-secondary);">
+                            <div style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 20px;">
+                                Load wallet data to see categorization options
+                            </div>
+                        </div>
+                        <small>Adjust how each external wallet is categorized for accurate profit calculations</small>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button class="cancel-btn" onclick="closeSettings()">Cancel</button>
@@ -1175,6 +1184,73 @@
             }
         }
 
+        // Wallet categorization management
+        function loadWalletCategorization() {
+            const saved = localStorage.getItem(`walletCategorization_${CONFIG.WALLET_ADDRESS}`);
+            if (saved) {
+                try {
+                    return new Map(JSON.parse(saved));
+                } catch (e) {
+                    console.warn('Failed to parse saved wallet categorization');
+                    return new Map();
+                }
+            }
+            return new Map();
+        }
+
+        function saveWalletCategorization(walletTypes) {
+            try {
+                const serialized = JSON.stringify(Array.from(walletTypes.entries()));
+                localStorage.setItem(`walletCategorization_${CONFIG.WALLET_ADDRESS}`, serialized);
+                return true;
+            } catch (e) {
+                console.error('Failed to save wallet categorization:', e);
+                return false;
+            }
+        }
+
+        function updateWalletCategorizationUI(walletTypes) {
+            const container = document.getElementById('walletCategorizationList');
+            if (!container) return;
+
+            if (walletTypes.size === 0) {
+                container.innerHTML = `
+                    <div style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 20px;">
+                        No wallets found. Load wallet data first.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            walletTypes.forEach((type, wallet) => {
+                const shortWallet = `${wallet.substring(0, 10)}...${wallet.substring(wallet.length - 6)}`;
+                html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div style="flex: 1; font-family: monospace; font-size: 0.875rem;">
+                            ${shortWallet}
+                        </div>
+                        <select onchange="updateWalletCategory('${wallet}', this.value)" style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px;">
+                            <option value="deposit" ${type === 'deposit' ? 'selected' : ''}>💰 Personal (Deposit/Withdrawal)</option>
+                            <option value="trading" ${type === 'trading' ? 'selected' : ''}>🔄 Trading Platform</option>
+                            <option value="initial_funding" ${type === 'initial_funding' ? 'selected' : ''}>🏦 Initial Funding</option>
+                        </select>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function updateWalletCategory(wallet, newType) {
+            // This will be called when user changes a wallet category
+            // We'll store it temporarily and save when user clicks Save Settings
+            if (!window.tempWalletCategories) {
+                window.tempWalletCategories = loadWalletCategorization();
+            }
+            window.tempWalletCategories.set(wallet, newType);
+        }
+
         let CONFIG = loadConfig();
 
 
@@ -1238,6 +1314,15 @@
             document.getElementById('walletAddress').value = CONFIG.WALLET_ADDRESS;
             document.getElementById('apiKey').value = CONFIG.API_KEY;
             document.getElementById('currency').value = CONFIG.CURRENCY || 'USD';
+            
+            // Initialize temp wallet categories with current saved ones
+            window.tempWalletCategories = loadWalletCategorization();
+            
+            // Update wallet categorization UI if we have data
+            if (window.tempWalletCategories.size > 0) {
+                updateWalletCategorizationUI(window.tempWalletCategories);
+            }
+            
             document.getElementById('settingsModal').style.display = 'flex';
         }
 
@@ -1267,10 +1352,16 @@
             CONFIG.API_KEY = apiKey;
             CONFIG.CURRENCY = currency;
 
+            // Save wallet categorization if any changes were made
+            if (window.tempWalletCategories) {
+                saveWalletCategorization(window.tempWalletCategories);
+                window.tempWalletCategories = null;
+            }
+
             // Save to localStorage
             if (saveConfig({ WALLET_ADDRESS: walletAddress, API_KEY: apiKey, CURRENCY: currency })) {
                 closeSettings();
-                // Reload data with new settings
+                // Reload data with new settings (this will recalculate with new categorization)
                 loadData();
             } else {
                 alert('Failed to save settings. Please try again.');
@@ -1327,11 +1418,14 @@
         // Key principle: First receive transaction identifies initial funding source
         // This helps distinguish deposits/withdrawals from trading transactions
         function analyzeWalletPatterns(transactions, userWallet) {
-            const walletTypes = new Map();
+            // Load saved categorization first
+            const savedCategorization = loadWalletCategorization();
+            const walletTypes = new Map(savedCategorization);
             const sortedTxs = transactions.sort((a, b) => parseInt(a.timeStamp) - parseInt(b.timeStamp));
 
             console.log(`🔍 DETAILED ANALYSIS for wallet: ${userWallet}`);
             console.log(`📊 Total transactions: ${transactions.length}`);
+            console.log(`💾 Loaded ${savedCategorization.size} saved wallet categorizations`);
 
             // Find the FIRST RECEIVE transaction to identify initial funding source
             const firstReceive = sortedTxs.find(tx =>
@@ -1409,37 +1503,32 @@
                 console.log(`   💰 Net flow: $${(stats.totalIn - stats.totalOut).toFixed(2)}`);
             });
 
-            // Categorize wallets based on transaction patterns
-            console.log(`\n🏷️  WALLET CATEGORIZATION:`);
+            // Simple categorization: First transaction determines wallet type
+            console.log(`\n🏷️  WALLET CATEGORIZATION (Based on First Transaction):`);
             walletStats.forEach((stats, wallet) => {
                 if (walletTypes.has(wallet)) {
                     console.log(`   ✅ ${wallet.substring(0, 10)}... already categorized as: ${walletTypes.get(wallet)}`);
                     return; // Already categorized (initial funding wallet)
                 }
 
-                // Smart categorization based on transaction patterns:
-                // 1. Bidirectional flow = Trading platform (exchanges, DEXs)
-                // 2. Unidirectional flow = Deposit/Withdrawal wallets (personal wallets, banks)
-
-                if (stats.inCount > 0 && stats.outCount > 0) {
-                    // Bidirectional transactions = Trading platform
-                    walletTypes.set(wallet, 'trading');
-                    console.log(`🔄 Trading wallet: ${wallet.substring(0, 10)}... (${stats.inCount} in, ${stats.outCount} out, $${(stats.totalIn + stats.totalOut).toFixed(2)})`);
-                } else if (stats.inCount > 0 && stats.outCount === 0) {
-                    // Only incoming = Deposit source (like initial funding wallet)
+                // Find the first transaction with this wallet
+                const firstTxWithWallet = stats.transactions[0]; // transactions are already sorted by timestamp
+                const firstIsReceive = firstTxWithWallet.isReceived;
+                
+                if (firstIsReceive) {
+                    // First transaction is RECEIVE = Personal wallet (deposit/withdrawal)
                     walletTypes.set(wallet, 'deposit');
-                    console.log(`📥 Deposit wallet: ${wallet.substring(0, 10)}... (${stats.inCount} deposits, $${stats.totalIn.toFixed(2)})`);
-                } else if (stats.outCount > 0 && stats.inCount === 0) {
-                    // Only outgoing = Withdrawal destination
-                    walletTypes.set(wallet, 'withdrawal');
-                    console.log(`📤 Withdrawal wallet: ${wallet.substring(0, 10)}... (${stats.outCount} withdrawals, $${stats.totalOut.toFixed(2)})`);
+                    console.log(`💰 Personal wallet: ${wallet.substring(0, 10)}... (first tx: RECEIVE $${firstTxWithWallet.amount.toFixed(2)})`);
                 } else {
-                    // Fallback to trading (shouldn't happen with valid data)
+                    // First transaction is SEND = Trading wallet (you invested first)
                     walletTypes.set(wallet, 'trading');
-                    console.log(`🔄 Default trading wallet: ${wallet.substring(0, 10)}...`);
+                    console.log(`🔄 Trading wallet: ${wallet.substring(0, 10)}... (first tx: SEND $${firstTxWithWallet.amount.toFixed(2)})`);
                 }
             });
 
+            // Update UI with current categorization
+            updateWalletCategorizationUI(walletTypes);
+            
             return walletTypes;
         }
 
@@ -1448,31 +1537,28 @@
             const amount = parseFloat(tx.value) / Math.pow(10, parseInt(tx.tokenDecimal));
             const externalWallet = (isReceived ? tx.from : tx.to).toLowerCase();
             const walletType = walletTypes.get(externalWallet) || 'trading';
+            
+            // Debug specific wallet
+            if (externalWallet.startsWith('0xb300000b')) {
+                console.log(`🐛 DEBUG wallet 0xb300000b...:`);
+                console.log(`   Wallet type from map: ${walletType}`);
+                console.log(`   Is received: ${isReceived}`);
+                console.log(`   Amount: $${amount.toFixed(2)}`);
+            }
 
-            // Smart categorization based on wallet type analysis
+            // Simple categorization based on wallet type
             let category;
             switch (walletType) {
                 case 'initial_funding':
-                    // Initial funding wallet: First wallet that sent funds
-                    // Transactions with this wallet = capital movements (deposits/withdrawals)
-                    category = isReceived ? 'deposit' : 'withdrawal';
-                    console.log(`💰 ${category}: $${amount.toFixed(2)} from/to INITIAL FUNDING wallet ${externalWallet.substring(0, 10)}...`);
-                    break;
                 case 'deposit':
-                    // Deposit-only wallets: Only send funds to user (like banks, personal wallets)
-                    // Receiving from these = deposit, Sending to these = unusual (treat as trade)
-                    category = isReceived ? 'deposit' : 'trade_out';
-                    console.log(`📥 ${category}: $${amount.toFixed(2)} from/to DEPOSIT-ONLY wallet ${externalWallet.substring(0, 10)}...`);
-                    break;
-                case 'withdrawal':
-                    // Withdrawal-only wallets: Only receive funds from user (destinations)
-                    // Sending to these = withdrawal, Receiving from these = unusual (treat as trade)
-                    category = isReceived ? 'trade_in' : 'withdrawal';
-                    console.log(`📤 ${category}: $${amount.toFixed(2)} from/to WITHDRAWAL-ONLY wallet ${externalWallet.substring(0, 10)}...`);
+                    // Personal wallets (first transaction was receive)
+                    // All transactions with these wallets = capital movements (deposits/withdrawals)
+                    category = isReceived ? 'deposit' : 'withdrawal';
+                    console.log(`💰 ${category}: $${amount.toFixed(2)} from/to PERSONAL wallet ${externalWallet.substring(0, 10)}...`);
                     break;
                 case 'trading':
                 default:
-                    // Trading wallets: Bidirectional flow (exchanges, DEXs, trading platforms)
+                    // Trading wallets (first transaction was send - you invested first)
                     // All transactions with these wallets = trading activity
                     category = isReceived ? 'trade_in' : 'trade_out';
                     console.log(`🔄 ${category}: $${amount.toFixed(2)} from/to TRADING wallet ${externalWallet.substring(0, 10)}...`);
@@ -2119,6 +2205,8 @@
 
                 // Fetch exchange rates first
                 await fetchExchangeRates();
+
+
 
                 const transactions = await fetchTransactions();
                 const data = processTransactions(transactions);
