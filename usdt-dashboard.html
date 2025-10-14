@@ -931,7 +931,15 @@
                     <span class="metric-value" id="currentBalance">$0.00</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">Starting Amount</span>
+                    <span class="metric-label">Sum of Deposits</span>
+                    <span class="metric-value" id="totalDeposits">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Sum of Withdrawals</span>
+                    <span class="metric-value" id="totalWithdrawals">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Current Own Funds</span>
                     <span class="metric-value" id="startingAmount">$0.00</span>
                 </div>
                 <div class="metric">
@@ -1717,18 +1725,15 @@
             const tradingDays = dailyArray.filter(day => day.hasTrades && day.dailyReceived > 0);
             const daysWithReceived = dailyArray.filter(day => day.dailyReceived > 0);
 
-            // Starting amount = first received amount
-            const startingAmount = daysWithReceived.length > 0 ? daysWithReceived[0].dailyReceived : 0;
+            // Calculate actual invested capital (deposits - withdrawals)
+            const currentOwnFunds = totalDeposits - totalWithdrawals;
 
             // Current balance = latest received amount (today's balance)
             const latestDay = daysWithReceived.length > 0 ? daysWithReceived[daysWithReceived.length - 1] : null;
             const currentBalance = latestDay ? latestDay.dailyReceived : 0;
 
-            // Total growth = current - starting
-            const totalTradingProfit = currentBalance - startingAmount;
-            const totalGrowthPercent = startingAmount > 0 ? (totalTradingProfit / startingAmount) * 100 : 0;
-
             // Recalculate daily P&L properly (day-to-day changes)
+            let cumulativeTradingProfit = 0;
             daysWithReceived.forEach((day, index) => {
                 if (index === 0) {
                     day.tradingProfit = 0; // First day has no profit
@@ -1737,20 +1742,38 @@
                     const previousDay = daysWithReceived[index - 1];
                     day.tradingProfit = day.dailyReceived - previousDay.dailyReceived;
                     day.tradingProfitPercent = previousDay.dailyReceived > 0 ? (day.tradingProfit / previousDay.dailyReceived) * 100 : 0;
+                    // Sum up all daily profits
+                    cumulativeTradingProfit += day.tradingProfit;
                 }
                 day.growthRate = day.tradingProfitPercent;
             });
+
+            // Total growth = sum of all daily profits (not current balance - invested funds)
+            const totalTradingProfit = cumulativeTradingProfit;
+            
+            // Calculate cumulative growth percentage based on daily percentages (compound growth)
+            let cumulativeGrowthMultiplier = 1.0;
+            daysWithReceived.slice(1).forEach(day => {
+                if (day.tradingProfitPercent && isFinite(day.tradingProfitPercent)) {
+                    cumulativeGrowthMultiplier *= (1 + day.tradingProfitPercent / 100);
+                }
+            });
+            const totalGrowthPercent = (cumulativeGrowthMultiplier - 1) * 100;
 
             const tradingProfits = daysWithReceived.slice(1).map(day => day.tradingProfitPercent).filter(p => !isNaN(p) && isFinite(p));
             const avgDailyGrowth = tradingProfits.length > 0 ?
                 tradingProfits.reduce((sum, p) => sum + p, 0) / tradingProfits.length : 0;
             const bestDay = tradingProfits.length > 0 ? Math.max(...tradingProfits) : 0;
 
-            console.log(`💰 CORRECTED CALCULATIONS:`);
-            console.log(`Starting amount: $${startingAmount.toFixed(2)}`);
+            console.log(`💰 CAPITAL & PROFIT CALCULATIONS:`);
+            console.log(`Total deposits: $${totalDeposits.toFixed(2)}`);
+            console.log(`Total withdrawals: $${totalWithdrawals.toFixed(2)}`);
+            console.log(`Current own funds: $${currentOwnFunds.toFixed(2)} (deposits - withdrawals)`);
             console.log(`Current balance: $${currentBalance.toFixed(2)}`);
-            console.log(`Total profit: $${totalTradingProfit.toFixed(2)}`);
-            console.log(`Total growth: ${totalGrowthPercent.toFixed(2)}%`);
+            console.log(`Total profit (sum of daily profits): $${totalTradingProfit.toFixed(2)}`);
+            console.log(`Total growth (compound daily %): ${totalGrowthPercent.toFixed(2)}%`);
+            console.log(`Cumulative growth multiplier: ${cumulativeGrowthMultiplier.toFixed(4)}x`);
+            console.log(`💡 Note: Current balance may be lower due to long-term investments`);
 
             // Get today's and last trading day data
             const today = new Date().toISOString().split('T')[0];
@@ -1801,8 +1824,8 @@
                 activeDays: tradingDays.length,
                 todayPnL: todayData,
                 lastTradingDayPnL: lastTradingDay,
-                // Corrected legacy compatibility
-                startBalance: startingAmount,
+                // Updated to use actual invested capital
+                startBalance: currentOwnFunds,
                 endBalance: currentBalance,
                 totalGrowth: totalTradingProfit,
                 totalGrowthPercent: totalGrowthPercent
@@ -2145,6 +2168,8 @@
         // Update UI functions
         function updateDashboard(data, predictions) {
             document.getElementById('currentBalance').textContent = formatCurrency(data.endBalance);
+            document.getElementById('totalDeposits').textContent = formatCurrency(data.totalDeposits);
+            document.getElementById('totalWithdrawals').textContent = formatCurrency(data.totalWithdrawals);
             document.getElementById('startingAmount').textContent = formatCurrency(data.startBalance);
             document.getElementById('totalGrowth').textContent = formatCurrency(data.totalGrowth);
             document.getElementById('growthPercentage').textContent = formatPercentage(data.totalGrowthPercent);
