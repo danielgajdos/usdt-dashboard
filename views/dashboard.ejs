@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -38,9 +39,11 @@
 <body class="p-4 md:p-8">
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
-        <header class="flex justify-between items-center mb-8 bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700">
+        <header
+            class="flex justify-between items-center mb-8 bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700">
             <div>
-                <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                <h1
+                    class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
                     🐲 BSC Hydra Bot
                     <span class="text-xs text-gray-400 font-normal ml-2">v1.0.0 (Pro)</span>
                 </h1>
@@ -49,9 +52,12 @@
             <div class="flex items-center gap-4">
                 <div class="text-right">
                     <p class="text-xs text-gray-500">USER</p>
-                    <p class="text-sm font-bold text-gray-300"><%= user.displayName %></p>
+                    <p class="text-sm font-bold text-gray-300">
+                        <%= user.displayName %>
+                    </p>
                 </div>
-                <img src="<%= user.photos[0].value %>" alt="User" class="w-10 h-10 rounded-full border-2 border-blue-500">
+                <img src="<%= user.photos[0].value %>" alt="User"
+                    class="w-10 h-10 rounded-full border-2 border-blue-500">
             </div>
         </header>
 
@@ -68,7 +74,9 @@
                 </div>
             </div>
             <div class="text-xs text-gray-500">
-                Mode: <span class="font-bold text-yellow-500"><%= botState.mode %></span>
+                Mode: <span class="font-bold text-yellow-500">
+                    <%= botState.mode %>
+                </span>
             </div>
         </div>
 
@@ -145,6 +153,7 @@
                     <thead class="text-gray-500 uppercase font-mono border-b border-gray-700">
                         <tr>
                             <th class="p-2">Exit Time</th>
+                            <th class="p-2">Strategy</th>
                             <th class="p-2">Token</th>
                             <th class="p-2">Invested</th>
                             <th class="p-2">Exit Value</th>
@@ -279,7 +288,7 @@
             document.getElementById('pf-equity').innerText = `$${pf.totalValue.toFixed(2)}`;
             document.getElementById('pf-cash').innerText = `$${pf.cashBalance.toFixed(2)}`;
             document.getElementById('pf-invested').innerText = `$${pf.investedBalance.toFixed(2)}`;
-            
+
             const pnlClass = pf.pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
             const pnlSign = pf.pnl >= 0 ? '+' : '';
             document.getElementById('pf-pnl').innerHTML = `<span class="${pnlClass}">${pnlSign}$${pf.pnl.toFixed(2)}</span>`;
@@ -314,6 +323,7 @@
                 historyContainer.innerHTML = pf.history.map(h => `
                     <tr class="border-b border-gray-700/50 hover:bg-gray-700/30 transition">
                         <td class="p-2 text-gray-400">${new Date(h.exitTime).toLocaleTimeString()}</td>
+                        <td class="p-2 text-xs font-bold text-gray-500 uppercase">${h.strategy || 'Unknown'}</td>
                         <td class="p-2 text-blue-300">${h.token.slice(0, 6)}...</td>
                         <td class="p-2">$${h.investment ? h.investment.toFixed(2) : '-'}</td>
                         <td class="p-2">$${h.exitValue ? h.exitValue.toFixed(2) : '-'}</td>
@@ -329,11 +339,11 @@
                 `).join('');
             }
 
-             // Chart Update
-             if (pf.snapshots && pf.snapshots.length > 0) {
+            // Chart Update
+            if (pf.snapshots && pf.snapshots.length > 0) {
                 const labels = pf.snapshots.map(s => new Date(s.time).toLocaleTimeString());
                 const data = pf.snapshots.map(s => s.equity);
-                
+
                 // Only update if new data
                 if (labels.length !== chartData.length) {
                     equityChart.data.labels = labels;
@@ -356,7 +366,7 @@
         // 4. Opportunities
         const oppsDiv = document.getElementById('opportunities-panel');
         document.getElementById('opp-count').innerText = `${state.stats.opportunities} found`;
-        
+
         if (state.opportunities.length > 0) {
             oppsDiv.innerHTML = state.opportunities.map(o => `
                 <div class="p-2 bg-gray-800 border-l-2 border-yellow-500 rounded shadow-sm">

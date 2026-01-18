@@ -6,7 +6,7 @@ const FACTORY_ABI = [
     'event PairCreated(address indexed token0, address indexed token1, address pair, uint)'
 ];
 
-async function startSniper(provider, logCallback) {
+async function startSniper(provider, logCallback, openPositionCallback) {
     const factory = new ethers.Contract(config.FACTORY_ADDRESS, FACTORY_ABI, provider);
 
     logCallback('Initializing Liquidity Sniper...', 'info');
@@ -31,7 +31,14 @@ async function startSniper(provider, logCallback) {
             logCallback(msg, 'success');
             console.log(chalk.green(msg));
 
-            // In a real bot, you would trigger a 'simulated buy' here
+            // Execute Sniper Entry
+            if (openPositionCallback) {
+                // Simulate $50 entry
+                const result = openPositionCallback('Sniper', otherToken, 50.00);
+                if (result.success) {
+                    logCallback(`[SNIPER] Position Opened! Bet: $50 on ${otherToken.slice(0, 6)}...`, 'success');
+                }
+            }
         } else {
             const msg = `[SNIPER] New Pair (No WBNB): ${token0} / ${token1}`;
             logCallback(msg, 'info');
