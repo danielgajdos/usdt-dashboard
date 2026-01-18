@@ -1,4 +1,6 @@
-const state = {
+const storage = require('./storage');
+
+let state = {
     cashBalance: 1000.00, // Initial USD
     investedBalance: 0.00,
     totalValue: 1000.00,
@@ -16,6 +18,16 @@ const GAS_FEE_USD = 0.50; // Estimated Gas per tx
 const SWAP_FEE_PCT = 0.0025; // 0.25% PancakeSwap Fee
 
 const portfolio = {
+    init: () => {
+        const loadedState = storage.loadState();
+        if (loadedState) {
+            state = { ...state, ...loadedState };
+            console.log('Portfolio state loaded from storage.');
+        } else {
+            console.log('No previous state found, starting fresh.');
+        }
+    },
+
     getPortfolio: () => {
         // Calculate Metrics
         const currentEquity = state.cashBalance + state.investedBalance;
@@ -30,7 +42,7 @@ const portfolio = {
             totalValue: currentEquity,
             pnl: state.pnl,
             metrics: {
-                initialCap: state.startEquity,
+                initialCap: parseFloat(state.startEquity.toFixed(2)), // FIXED: Rounding
                 totalReturnPct,
                 avgDailyPct,
                 daysActive
@@ -45,6 +57,7 @@ const portfolio = {
         state.startTime = new Date().toISOString(); // Reset timer
         // Take initial snapshot
         portfolio.takeSnapshot();
+        storage.saveState(state);
     },
 
     takeSnapshot: () => {
@@ -56,6 +69,7 @@ const portfolio = {
         });
         // Keep last 1000 snapshots
         if (state.snapshots.length > 1000) state.snapshots.shift();
+        storage.saveState(state);
     },
 
     openPosition: (strategy, tokenAddress, amountUSD) => {
@@ -83,6 +97,7 @@ const portfolio = {
         };
 
         state.positions.push(position);
+        storage.saveState(state);
 
         return {
             success: true,
@@ -100,6 +115,7 @@ const portfolio = {
         state.history.unshift({
             time: new Date().toISOString(),
             type: 'ARBITRAGE',
+            strategy: 'Arbitrage', // Added strategy field for consistency
             token: 'BNB/USDT',
             amount: 0, // No position held
             price: 'N/A',
@@ -109,6 +125,7 @@ const portfolio = {
 
         // Keep history size manageable
         if (state.history.length > 50) state.history.pop();
+        storage.saveState(state);
     },
 
     closePosition: (tokenAddress, exitValueUSD) => {
@@ -152,6 +169,7 @@ const portfolio = {
 
         // Remove from Open Positions
         state.positions.splice(idx, 1);
+        storage.saveState(state);
 
         return { success: true, pnl };
     }
