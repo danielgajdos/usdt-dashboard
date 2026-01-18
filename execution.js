@@ -78,7 +78,7 @@ async function executeBuy(signer, tokenOut, amountInUSD) {
         console.log(`Buy Tx Sent: ${tx.hash}`);
         const receipt = await tx.wait();
 
-        return { success: true, txHash: receipt.hash, amountOut: amounts[2] };
+        return { success: true, txHash: receipt.hash, amountOut: amounts[amounts.length - 1] };
 
     } catch (error) {
         console.error('Buy Execution Failed:', error);
