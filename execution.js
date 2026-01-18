@@ -123,11 +123,11 @@ async function executeSell(signer, tokenIn) {
         console.log(`Sell Tx Sent: ${tx.hash}`);
         const receipt = await tx.wait();
 
-        return { success: true, txHash: receipt.hash, amountOut: amounts[2] };
+        return { success: true, txHash: receipt.hash, amountOut: amounts[amounts.length - 1] };
 
     } catch (error) {
         console.error('Sell Execution Failed:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: error.message || error.toString() }; // Fix for undefined error
     }
 }
 
