@@ -33,5 +33,6 @@ module.exports = {
     SIMULATION_MODE: process.env.SIMULATION_MODE !== 'false', // Default true unless explicitly false
 
     MIN_PROFIT_PERCENT: 0.5, // Minimum profit percentage to trigger a trade
-    INVESTMENT_AMOUNT: '0.01' // Amount of WBNB to trade
+    INVESTMENT_AMOUNT: '0.01', // Amount of WBNB to trade
+    SNIPE_MODE: process.env.SNIPE_MODE === 'true' // Liquidity Sniper Mode
 };
