@@ -1,5 +1,19 @@
 {
-  "dependencies": {
-    "node-binance-api": "^1.0.15"
-  }
+    "name": "bsc-arb-bot",
+    "version": "1.0.0",
+    "description": "Educational BSC Arbitrage Bot Prototype",
+    "main": "index.js",
+    "scripts": {
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "chalk": "^4.1.2",
+        "dotenv": "^16.3.1",
+        "ejs": "^4.0.1",
+        "ethers": "^6.10.0",
+        "express": "^5.2.1",
+        "express-session": "^1.18.2",
+        "passport": "^0.7.0",
+        "passport-google-oauth20": "^2.0.0"
+    }
 }

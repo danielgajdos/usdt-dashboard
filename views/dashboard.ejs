@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSC Hydra Bot 🐲</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-8 bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700">
+            <div>
+                <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                    🐲 BSC Hydra Bot
+                    <span class="text-xs text-gray-400 font-normal ml-2">v1.0.0 (Pro)</span>
+                </h1>
+                <p class="text-gray-400 text-sm mt-1">Multi-Strategy Arbitrage & Copy Trading Engine</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right">
+                    <p class="text-xs text-gray-500">USER</p>
+                    <p class="text-sm font-bold text-gray-300"><%= user.displayName %></p>
+                </div>
+                <img src="<%= user.photos[0].value %>" alt="User" class="w-10 h-10 rounded-full border-2 border-blue-500">
+            </div>
+        </header>
+
+        <!-- Control Bar -->
+        <div class="flex justify-between items-center mb-8">
+            <div class="flex gap-4">
+                <button id="startBtn"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded shadow-lg transition flex items-center gap-2">
+                    <span id="startIcon">▶</span> Start Bot
+                </button>
+                <div class="flex items-center gap-2 bg-gray-800 px-4 py-2 rounded border border-gray-700">
+                    <div class="w-3 h-3 rounded-full bg-red-500" id="status-dot"></div>
+                    <span class="text-sm font-bold text-gray-300" id="status-text">OFFLINE</span>
+                </div>
+            </div>
+            <div class="text-xs text-gray-500">
+                Mode: <span class="font-bold text-yellow-500"><%= botState.mode %></span>
+            </div>
+        </div>
+
+        <!-- Dashboard Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Portfolio Card -->
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-10 text-9xl">💰</div>
+                <h2 class="text-xl font-bold text-gray-400 mb-4 flex justify-between items-center">
+                    💰 <span id="pf-title">Portfolio</span>
+                    <span id="pf-cap-badge"
+                        class="text-xs font-normal bg-blue-900 text-blue-200 px-2 py-1 rounded">Initial Cap:
+                        $<%= botState.portfolio.metrics.initialCap %></span>
+                </h2>
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <span class="text-gray-400 text-sm">Total Equity</span>
+                        <p class="text-3xl font-bold text-white" id="pf-equity">Loading...</p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-sm">Cash Balance</span>
+                        <p class="text-xl font-mono text-gray-300" id="pf-cash">Loading...</p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-sm">Invested</span>
+                        <p class="text-xl font-mono text-blue-400" id="pf-invested">Loading...</p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-sm">Realized PnL</span>
+                        <p class="text-xl font-mono" id="pf-pnl">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Metrics (New) -->
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
+                <h2 class="text-lg font-bold text-gray-400 mb-4">📈 Performance</h2>
+                <div class="space-y-4">
+                    <div>
+                        <span class="text-gray-500 text-xs uppercase">Total Return (ROI)</span>
+                        <p id="metric-roi" class="text-2xl font-bold text-gray-300">0.00%</p>
+                    </div>
+                    <div>
+                        <span class="text-gray-500 text-xs uppercase">Avg Daily Increase</span>
+                        <p id="metric-daily" class="text-xl font-mono text-gray-300">0.00% / day</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Container (New) -->
+            <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 shadow-lg flex flex-col">
+                <h2 class="text-sm font-semibold text-gray-400 mb-2">Equity Curve (24h)</h2>
+                <div class="flex-1 relative">
+                    <canvas id="equityChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <!-- Open Positions List (Moved out) -->
+            <div class="col-span-1 md:col-span-4 bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
+                <h3 class="text-sm text-gray-400 mb-2">🟢 Active Positions (Open)</h3>
+                <div id="pf-positions" class="text-xs font-mono text-gray-500">
+                    Waiting for trade signals...
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade History (Closed) -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8 border border-gray-700 shadow-lg">
+            <h2 class="text-xl font-bold text-gray-400 mb-4">📜 Trade History (Closed)</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="text-gray-500 uppercase font-mono border-b border-gray-700">
+                        <tr>
+                            <th class="p-2">Exit Time</th>
+                            <th class="p-2">Token</th>
+                            <th class="p-2">Invested</th>
+                            <th class="p-2">Exit Value</th>
+                            <th class="p-2">PnL</th>
+                            <th class="p-2">Result</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trade-history" class="font-mono text-gray-300">
+                        <tr>
+                            <td colspan="6" class="p-4 text-center text-gray-500 italic">No trade history yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Stats Grid (Previous - Keep below) -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 opacity-75">
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-800">
+                <h3 class="text-gray-500 text-xs uppercase mb-1">Network Status</h3>
+                <p class="text-lg font-bold text-blue-400" id="network">Connecting...</p>
+            </div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-800">
+                <h3 class="text-gray-500 text-xs uppercase mb-1">Checks</h3>
+                <p class="text-lg font-bold text-white" id="checks">0</p>
+            </div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-800">
+                <h3 class="text-gray-500 text-xs uppercase mb-1">Opportunities</h3>
+                <p class="text-lg font-bold text-green-500" id="opportunities">0</p>
+            </div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-800">
+                <h3 class="text-gray-500 text-xs uppercase mb-1">Last Check</h3>
+                <p class="text-lg font-bold text-gray-300" id="lastCheck">Starting...</p>
+            </div>
+        </div>
+
+        <!-- Main Grid (Logs) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- Logs Panel (Left) -->
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 h-96 flex flex-col">
+                <h2 class="text-lg font-semibold mb-4 text-gray-400">System Logs</h2>
+                <div id="logs" class="flex-1 overflow-y-auto font-mono text-xs space-y-1 bg-gray-900 p-4 rounded">
+                    <p class="text-gray-500">Waiting for logs...</p>
+                </div>
+            </div>
+
+            <!-- Opportunities Panel (Right) -->
+            <div
+                class="bg-gray-800 rounded-lg p-6 border border-yellow-500/30 h-96 flex flex-col shadow-[0_0_15px_rgba(234,179,8,0.1)]">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-yellow-500 flex items-center gap-2">
+                        <span class="animate-pulse">⚡</span> Live Opportunities
+                    </h2>
+                    <span id="opp-count" class="bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded text-xs">0
+                        found</span>
+                </div>
+                <div id="opportunities-panel"
+                    class="flex-1 overflow-y-auto font-mono text-xs space-y-2 bg-gray-900/50 p-4 rounded border border-gray-700/50">
+                    <p class="text-gray-500 italic text-center mt-10">Scanning for brave opportunities...</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</body>
+
+<script>
+    // --- Chart.js Setup ---
+    const ctx = document.getElementById('equityChart').getContext('2d');
+    const equityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [], // Time
+            datasets: [{
+                label: 'Total Equity ($)',
+                data: [],
+                borderColor: '#10b981', // Emerald
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { display: false },
+                y: {
+                    grid: { color: '#374151' },
+                    ticks: { color: '#9ca3af' }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            },
+            animation: false
+        }
+    });
+
+    const startBtn = document.getElementById('startBtn');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+
+    let chartData = [];
+
+    // Poll for status
+    setInterval(async () => {
+        const res = await fetch('/api/status');
+        const state = await res.json();
+
+        // 1. Update Core State
+        if (state.isRunning) {
+            statusDot.classList.replace('bg-red-500', 'bg-emerald-500');
+            statusDot.classList.add('animate-pulse');
+            statusText.textContent = 'RUNNING';
+            statusText.classList.replace('text-gray-300', 'text-emerald-400');
+            startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            startBtn.textContent = 'Running...';
+        }
+
+        document.getElementById('network').innerText = state.network || 'Disconnected';
+        document.getElementById('checks').innerText = state.stats.checks;
+        document.getElementById('opportunities').innerText = state.stats.opportunities;
+        document.getElementById('lastCheck').innerText = state.stats.lastCheck ? new Date(state.stats.lastCheck).toLocaleTimeString() : 'Never';
+
+        // 2. Update Portfolio
+        if (state.portfolio) {
+            const pf = state.portfolio;
+            document.getElementById('pf-equity').innerText = `$${pf.totalValue.toFixed(2)}`;
+            document.getElementById('pf-cash').innerText = `$${pf.cashBalance.toFixed(2)}`;
+            document.getElementById('pf-invested').innerText = `$${pf.investedBalance.toFixed(2)}`;
+            
+            const pnlClass = pf.pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+            const pnlSign = pf.pnl >= 0 ? '+' : '';
+            document.getElementById('pf-pnl').innerHTML = `<span class="${pnlClass}">${pnlSign}$${pf.pnl.toFixed(2)}</span>`;
+
+            // Metrics
+            document.getElementById('metric-roi').innerText = `${pf.metrics.totalReturnPct.toFixed(2)}%`;
+            document.getElementById('metric-roi').className = `text-2xl font-bold ${pf.metrics.totalReturnPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+            document.getElementById('metric-daily').innerText = `${pf.metrics.avgDailyPct.toFixed(2)}% / day`;
+
+            // Positions
+            const posContainer = document.getElementById('pf-positions');
+            if (pf.positions.length > 0) {
+                posContainer.innerHTML = pf.positions.map(p => `
+                    <div class="flex justify-between items-center py-2 border-b border-gray-700 last:border-0 hover:bg-gray-700/50 px-2 rounded">
+                        <div>
+                            <span class="text-blue-300 font-bold">${p.token.slice(0, 6)}...</span>
+                            <span class="text-xs text-gray-500 ml-2">${p.strategy}</span>
+                        </div>
+                         <div class="text-right">
+                            <div class="text-gray-300">$${p.initialInvestment.toFixed(2)}</div>
+                            <div class="text-xs text-gray-500">${new Date(p.timestamp).toLocaleTimeString()}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                posContainer.innerHTML = '<span class="text-gray-500 italic">No active positions. Scanning market...</span>';
+            }
+
+            // Trade History
+            const historyContainer = document.getElementById('trade-history');
+            if (pf.history.length > 0) {
+                historyContainer.innerHTML = pf.history.map(h => `
+                    <tr class="border-b border-gray-700/50 hover:bg-gray-700/30 transition">
+                        <td class="p-2 text-gray-400">${new Date(h.exitTime).toLocaleTimeString()}</td>
+                        <td class="p-2 text-blue-300">${h.token.slice(0, 6)}...</td>
+                        <td class="p-2">$${h.investment ? h.investment.toFixed(2) : '-'}</td>
+                        <td class="p-2">$${h.exitValue ? h.exitValue.toFixed(2) : '-'}</td>
+                        <td class="p-2 ${h.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold">
+                            ${h.pnl >= 0 ? '+' : ''}$${h.pnl.toFixed(2)}
+                        </td>
+                         <td class="p-2">
+                            <span class="px-2 py-0.5 rounded text-xs ${h.pnl >= 0 ? 'bg-emerald-900 text-emerald-200' : 'bg-red-900 text-red-200'}">
+                                ${h.result}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+             // Chart Update
+             if (pf.snapshots && pf.snapshots.length > 0) {
+                const labels = pf.snapshots.map(s => new Date(s.time).toLocaleTimeString());
+                const data = pf.snapshots.map(s => s.equity);
+                
+                // Only update if new data
+                if (labels.length !== chartData.length) {
+                    equityChart.data.labels = labels;
+                    equityChart.data.datasets[0].data = data;
+                    equityChart.update();
+                    chartData = labels;
+                }
+            }
+        }
+
+        // 3. System Logs
+        const logsDiv = document.getElementById('logs');
+        logsDiv.innerHTML = state.logs.map(l => {
+            const color = l.type === 'error' ? 'text-red-400' : (l.type === 'success' ? 'text-emerald-400' : 'text-gray-300');
+            return `<div class="mb-1"><span class="text-gray-600">[${new Date(l.time).toLocaleTimeString()}]</span> <span class="${color}">${l.message}</span></div>`;
+        }).join('');
+        // Auto scroll? Only if near bottom? For now simplicity:
+        // logsDiv.scrollTop = logsDiv.scrollHeight; 
+
+        // 4. Opportunities
+        const oppsDiv = document.getElementById('opportunities-panel');
+        document.getElementById('opp-count').innerText = `${state.stats.opportunities} found`;
+        
+        if (state.opportunities.length > 0) {
+            oppsDiv.innerHTML = state.opportunities.map(o => `
+                <div class="p-2 bg-gray-800 border-l-2 border-yellow-500 rounded shadow-sm">
+                    <div class="text-xs text-gray-500 mb-1">${new Date(o.time).toLocaleTimeString()}</div>
+                    <div class="text-emerald-300 font-bold">${o.message}</div>
+                </div>
+            `).join('');
+        }
+    }, 1000);
+
+    // Start Handler
+    startBtn.addEventListener('click', async () => {
+        const res = await fetch('/api/start', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert('Bot Started!');
+        }
+    });
+
+</script>
+
+</html>
