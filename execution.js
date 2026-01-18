@@ -51,13 +51,19 @@ async function executeBuy(signer, tokenOut, amountInUSD) {
         // 2. Amount In already calculated above
 
         // 3. Get expected Output
-        const path = [USDT_ADDRESS, config.TOKENS.WBNB, tokenOut]; // USDT -> WBNB -> Token
+        let path = [USDT_ADDRESS, config.TOKENS.WBNB, tokenOut]; // Default: USDT -> WBNB -> Token
+
+        // Fix for IDENTICAL_ADDRESSES if buying WBNB
+        if (tokenOut.toLowerCase() === config.TOKENS.WBNB.toLowerCase()) {
+            path = [USDT_ADDRESS, config.TOKENS.WBNB];
+        }
+
         // Optimization: Check if direct pair exists, but usually via WBNB is safest for routing
 
         // Note: For now, simple path USDT -> WBNB -> Token 
 
         const amounts = await router.getAmountsOut(amountIn, path);
-        const amountOutMin = amounts[2] * 95n / 100n; // 5% Slippage tolerance
+        const amountOutMin = amounts[amounts.length - 1] * 95n / 100n; // 5% Slippage tolerance
 
         console.log(`Swapping ${amountInUSD} USDT for ${tokenOut}...`);
 
@@ -93,11 +99,16 @@ async function executeSell(signer, tokenIn) {
         await approveToken(signer, tokenIn);
 
         // 3. Swap Token -> WBNB -> USDT
-        const path = [tokenIn, config.TOKENS.WBNB, USDT_ADDRESS];
+        let path = [tokenIn, config.TOKENS.WBNB, USDT_ADDRESS];
+
+        // Fix for IDENTICAL_ADDRESSES if selling WBNB
+        if (tokenIn.toLowerCase() === config.TOKENS.WBNB.toLowerCase()) {
+            path = [config.TOKENS.WBNB, USDT_ADDRESS];
+        }
 
         // Estimate output
         const amounts = await router.getAmountsOut(balance, path);
-        const amountOutMin = amounts[2] * 90n / 100n; // 10% Slippage for sells (safety)
+        const amountOutMin = amounts[amounts.length - 1] * 90n / 100n; // 10% Slippage for sells (safety)
 
         console.log(`Selling ${balance} of ${tokenIn} for USDT...`);
 
