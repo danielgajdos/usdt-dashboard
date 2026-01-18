@@ -209,10 +209,20 @@ async function startBot() {
         // Update portfolio stats periodically too (e.g. if we had live price feeds)
         botState.portfolio = portfolio.getPortfolio();
 
-        // Refresh Gas Balance
+        // Refresh Gas Balance & USDT (Simulate "Re-Sync")
         if (signer) {
+            // BNB
             const balance = await provider.getBalance(signer.address);
             botState.walletBalance = ethers.formatEther(balance);
+
+            // USDT (Real-time Sync)
+            // We need execution module for this
+            const execution = require('./execution');
+            const usdtBal = await execution.getUSDTBalance(signer);
+            botState.walletBalanceUSDT = usdtBal;
+
+            // Sync with Portfolio (Detect Deposits)
+            portfolio.syncBalance(parseFloat(usdtBal));
         }
 
         const opportunityFound = await checkArbitrage(provider, log);

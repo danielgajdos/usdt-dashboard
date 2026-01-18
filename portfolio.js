@@ -60,6 +60,25 @@ const portfolio = {
         storage.saveState(state);
     },
 
+    syncBalance: (newBalance) => {
+        const currentCash = state.cashBalance;
+        const diff = newBalance - currentCash;
+
+        // If difference is significant (e.g. > $1), assume external deposit/withdraw
+        if (Math.abs(diff) > 1.0) {
+            console.log(`[Portfolio] DETECTED EXTERNAL BALANCE CHANGE: ${diff > 0 ? '+' : ''}$${diff.toFixed(2)}`);
+
+            state.cashBalance = newBalance;
+            // Adjust Start Equity so PnL % remains accurate (as if we started with more/less)
+            // Or alternatively, we could treat it as a "transfer" and not affect PnL, 
+            // but increasing startEquity is the simplest way to keep ROI honest.
+            state.startEquity += diff;
+
+            state.totalValue = state.cashBalance + state.investedBalance;
+            storage.saveState(state);
+        }
+    },
+
     takeSnapshot: () => {
         const equity = state.cashBalance + state.investedBalance;
         state.snapshots.push({
