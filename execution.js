@@ -42,7 +42,7 @@ async function executeBuy(signer, tokenOut, amountInUSD) {
         const amountIn = ethers.parseUnits(amountInUSD.toString(), 18); // USDT
 
         // 3. Get expected Output
-        const path = [USDT_ADDRESS, config.WBNB_ADDRESS, tokenOut]; // USDT -> WBNB -> Token
+        const path = [USDT_ADDRESS, config.TOKENS.WBNB, tokenOut]; // USDT -> WBNB -> Token
         // Optimization: Check if direct pair exists, but usually via WBNB is safest for routing
 
         // Note: For now, simple path USDT -> WBNB -> Token 
@@ -84,7 +84,7 @@ async function executeSell(signer, tokenIn) {
         await approveToken(signer, tokenIn);
 
         // 3. Swap Token -> WBNB -> USDT
-        const path = [tokenIn, config.WBNB_ADDRESS, USDT_ADDRESS];
+        const path = [tokenIn, config.TOKENS.WBNB, USDT_ADDRESS];
 
         // Estimate output
         const amounts = await router.getAmountsOut(balance, path);
