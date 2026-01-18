@@ -20,7 +20,7 @@ async function approveToken(signer, tokenAddress) {
         const tokenVal = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
         const allowance = await tokenVal.allowance(signer.address, ROUTER_ADDRESS);
 
-        if (allowance < ethers.parseEther('1000000')) { // Arbitrary large number
+        if (allowance < ethers.parseEther('1000000')) {
             console.log(`Approving ${tokenAddress}...`);
             const tx = await tokenVal.approve(ROUTER_ADDRESS, ethers.MaxUint256);
             await tx.wait();
@@ -28,6 +28,7 @@ async function approveToken(signer, tokenAddress) {
         }
     } catch (error) {
         console.error(`Approval failed for ${tokenAddress}:`, error.message);
+        throw error; // Re-throw to stop execution!
     }
 }
 
@@ -35,11 +36,19 @@ async function executeBuy(signer, tokenOut, amountInUSD) {
     try {
         const router = new ethers.Contract(ROUTER_ADDRESS, ROUTER_ABI, signer);
 
+        // 0. Check Balance BEFORE Approve/Trade
+        const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, signer);
+        const balance = await usdtContract.balanceOf(signer.address);
+        const amountIn = ethers.parseUnits(amountInUSD.toString(), 18); // USDT on BSC is 18 decimals
+
+        if (balance < amountIn) {
+            return { success: false, error: `Insufficient USDT Balance: ${ethers.formatUnits(balance, 18)} < ${amountInUSD}` };
+        }
+
         // 1. Ensure USDT is approved
         await approveToken(signer, USDT_ADDRESS);
 
-        // 2. Calculate Amount In (USDT has 18 decimals on BSC)
-        const amountIn = ethers.parseUnits(amountInUSD.toString(), 18); // USDT
+        // 2. Amount In already calculated above
 
         // 3. Get expected Output
         const path = [USDT_ADDRESS, config.TOKENS.WBNB, tokenOut]; // USDT -> WBNB -> Token
