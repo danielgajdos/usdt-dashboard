@@ -48,6 +48,10 @@ async function startBot() {
     if (botState.isRunning) return;
     botState.isRunning = true;
 
+    // Load previous state if available
+    portfolio.init();
+
+
     log('Starting BSC Arbitrage Bot...', 'info');
     log(`Mode: ${config.SIMULATION_MODE ? 'SIMULATION' : 'LIVE'}`, 'info');
     log(`RPC: ${config.RPC_URL}`, 'info');
