@@ -194,36 +194,35 @@ async function startBot() {
         if (!botState.portfolio || !botState.portfolio.positions) return [];
         return botState.portfolio.positions.map(p => p.token.toLowerCase());
     }
-}
 
-// Loop for Arbitrage
-setInterval(async () => {
-    if (!botState.isRunning) return;
+    // Loop for Arbitrage
+    setInterval(async () => {
+        if (!botState.isRunning) return;
 
-    botState.stats.checks++;
-    botState.stats.lastCheck = new Date().toISOString(); // Use ISO for proper frontend formatting
-    // Update portfolio stats periodically too (e.g. if we had live price feeds)
-    botState.portfolio = portfolio.getPortfolio();
+        botState.stats.checks++;
+        botState.stats.lastCheck = new Date().toISOString(); // Use ISO for proper frontend formatting
+        // Update portfolio stats periodically too (e.g. if we had live price feeds)
+        botState.portfolio = portfolio.getPortfolio();
 
-    const opportunityFound = await checkArbitrage(provider, log);
-    if (opportunityFound) {
-        log('Arbitrage Opportunity Detected! Executing...', 'success');
+        const opportunityFound = await checkArbitrage(provider, log);
+        if (opportunityFound) {
+            log('Arbitrage Opportunity Detected! Executing...', 'success');
 
-        if (!config.SIMULATION_MODE && signer) {
-            const execution = require('./execution');
-            // Only trade if not already busy? (Simple await handles it)
-            await execution.executeArbitrage(signer, log);
+            if (!config.SIMULATION_MODE && signer) {
+                const execution = require('./execution');
+                // Only trade if not already busy? (Simple await handles it)
+                await execution.executeArbitrage(signer, log);
+            } else {
+                log('Simulation Mode: Trade would be executed here.', 'info');
+            }
+
         } else {
-            log('Simulation Mode: Trade would be executed here.', 'info');
+            // Log heartbeat every 10 checks to avoid spamming the dashboard
+            if (botState.stats.checks % 10 === 0) {
+                log('Scanning... No opportunities found.', 'info');
+            }
         }
-
-    } else {
-        // Log heartbeat every 10 checks to avoid spamming the dashboard
-        if (botState.stats.checks % 10 === 0) {
-            log('Scanning... No opportunities found.', 'info');
-        }
-    }
-}, 5000);
+    }, 5000);
 }
 
 module.exports = { startBot, botState };
