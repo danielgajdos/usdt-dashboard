@@ -101,6 +101,10 @@
                         <p class="text-xl font-mono text-gray-300" id="pf-cash">Loading...</p>
                     </div>
                     <div>
+                        <span class="text-gray-400 text-sm">Gas (BNB)</span>
+                        <p class="text-xl font-mono text-yellow-500" id="pf-gas">Loading...</p>
+                    </div>
+                    <div>
                         <span class="text-gray-400 text-sm">Invested</span>
                         <p class="text-xl font-mono text-blue-400" id="pf-invested">Loading...</p>
                     </div>
@@ -287,6 +291,7 @@
             const pf = state.portfolio;
             document.getElementById('pf-equity').innerText = `$${pf.totalValue.toFixed(2)}`;
             document.getElementById('pf-cash').innerText = `$${pf.cashBalance.toFixed(2)}`;
+            document.getElementById('pf-gas').innerText = `${parseFloat(state.walletBalance || 0).toFixed(4)} BNB`;
             document.getElementById('pf-invested').innerText = `$${pf.investedBalance.toFixed(2)}`;
 
             const pnlClass = pf.pnl >= 0 ? 'text-emerald-400' : 'text-red-400';

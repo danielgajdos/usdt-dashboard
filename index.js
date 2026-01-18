@@ -209,6 +209,12 @@ async function startBot() {
         // Update portfolio stats periodically too (e.g. if we had live price feeds)
         botState.portfolio = portfolio.getPortfolio();
 
+        // Refresh Gas Balance
+        if (signer) {
+            const balance = await provider.getBalance(signer.address);
+            botState.walletBalance = ethers.formatEther(balance);
+        }
+
         const opportunityFound = await checkArbitrage(provider, log);
         if (opportunityFound) {
             log('Arbitrage Opportunity Detected! Executing...', 'success');
