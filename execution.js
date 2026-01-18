@@ -11,6 +11,7 @@ const ERC20_ABI = [
 
 const ROUTER_ABI = [
     'function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)',
+    'function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external',
     'function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts)',
     'function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)'
 ];
@@ -63,11 +64,13 @@ async function executeBuy(signer, tokenOut, amountInUSD) {
         // Note: For now, simple path USDT -> WBNB -> Token 
 
         const amounts = await router.getAmountsOut(amountIn, path);
-        const amountOutMin = amounts[amounts.length - 1] * 95n / 100n; // 5% Slippage tolerance
+        // Use 10% Slippage to handle Tax Tokens (Fee-On-Transfer)
+        const amountOutMin = amounts[amounts.length - 1] * 90n / 100n;
 
         console.log(`Swapping ${amountInUSD} USDT for ${tokenOut}...`);
 
-        const tx = await router.swapExactTokensForTokens(
+        // Use SupportingFeeOnTransferTokens to avoid reverts on tax tokens
+        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
             amountIn,
             amountOutMin,
             path,
@@ -108,11 +111,13 @@ async function executeSell(signer, tokenIn) {
 
         // Estimate output
         const amounts = await router.getAmountsOut(balance, path);
-        const amountOutMin = amounts[amounts.length - 1] * 90n / 100n; // 10% Slippage for sells (safety)
+        // Use 10% Slippage for Sells too
+        const amountOutMin = amounts[amounts.length - 1] * 90n / 100n;
 
         console.log(`Selling ${balance} of ${tokenIn} for USDT...`);
 
-        const tx = await router.swapExactTokensForTokens(
+        // Use SupportingFeeOnTransferTokens
+        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
             balance,
             amountOutMin,
             path,
