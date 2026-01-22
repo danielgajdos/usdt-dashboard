@@ -203,8 +203,49 @@ async function executeArbitrage(signer, logCallback) {
         // FIXED: Calculate amounts first!
         const amounts = await router.getAmountsOut(amountIn, path);
 
-        // SAFE MODE: Set amountOutMin to 98% of estimate (Slippage Protection)
-        const amountOutMinSafe = amounts[amounts.length - 1] * 98n / 100n;
+        // --- SAFE MODE CHECKS ---
+        if (config.SAFE_MODE) {
+            // 1. Enforce Max Trade Amount (Re-calculate amountIn if needed)
+            // Approximate BNB Price for sizing (Assume $300 if unknown, or safe default)
+            // Realistically we should fetch it, but for safety we can just cap amountIn directly.
+            // 15 USD / 300 = 0.05 BNB. Let's be very conservative.
+            // Better: use the stablecoin balance check to limit amountIn for USDT trades.
+
+            const maxUsd = BigInt(config.SAFE_CONFIG.MAX_TRADE_AMOUNT_USD) * (10n ** 18n); // 15 * 10^18
+
+            if (tradeType === 'USDT') {
+                if (amountIn > maxUsd) {
+                    amountIn = maxUsd;
+                    logCallback(`[SAFE MODE] Capping Trade Size to ${config.SAFE_CONFIG.MAX_TRADE_AMOUNT_USD} USDT`, 'info');
+                    // Recalculate output with new amount
+                    // amounts = await router.getAmountsOut(amountIn, path); // Can't reassign const, need to handle this
+                }
+            } else if (tradeType === 'BNB') {
+                // Rough calc: 1 BNB = $500 (Safety Buffer). 15 / 500 = 0.03 BNB
+                const maxBnb = ethers.parseEther('0.03');
+                if (amountIn > maxBnb) {
+                    amountIn = maxBnb;
+                    logCallback(`[SAFE MODE] Capping Trade Size to 0.03 BNB (~$15)`, 'info');
+                }
+            }
+        }
+
+        // Re-fetch amounts in case amountIn changed
+        const finalAmounts = await router.getAmountsOut(amountIn, path);
+        const amountOut = finalAmounts[finalAmounts.length - 1];
+
+        // 2. Check Profit Requirement (Double Check)
+        const profit = amountOut - amountIn;
+        const profitPercent = (Number(profit) / Number(amountIn)) * 100;
+
+        if (config.SAFE_MODE && profitPercent < config.SAFE_CONFIG.MIN_PROFIT_PERCENT) {
+            logCallback(`[SAFE MODE] Profit ${profitPercent.toFixed(4)}% < ${config.SAFE_CONFIG.MIN_PROFIT_PERCENT}%. Aborting.`, 'warning');
+            return { success: false, reason: 'Profit too low for Safe Mode' };
+        }
+
+        // SAFE MODE: Set amountOutMin based on strict slippage
+        const slippage = config.SAFE_MODE ? BigInt(config.SAFE_CONFIG.SLIPPAGE_PERCENT) : 2n; // 2% or standard
+        const amountOutMinSafe = amountOut * (100n - slippage) / 100n;
 
         let tx;
         // Keep gas limit reasonable but allow for complex routing

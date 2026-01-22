@@ -34,5 +34,13 @@ module.exports = {
 
     MIN_PROFIT_PERCENT: 0.5, // Minimum profit percentage to trigger a trade
     INVESTMENT_AMOUNT: '0.01', // Amount of WBNB to trade
-    SNIPE_MODE: process.env.SNIPE_MODE === 'true' // Liquidity Sniper Mode
+    SNIPE_MODE: process.env.SNIPE_MODE === 'true', // Liquidity Sniper Mode
+
+    // --- SAFETY SETTINGS ---
+    SAFE_MODE: true, // Force Safe Mode for now
+    SAFE_CONFIG: {
+        MAX_TRADE_AMOUNT_USD: 15, // Max trade size in USD
+        MIN_PROFIT_PERCENT: 1.5,  // Higher profit threshold
+        SLIPPAGE_PERCENT: 2       // Stricter slippage (2% instead of 10%)
+    }
 };

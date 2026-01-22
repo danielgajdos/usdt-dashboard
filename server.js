@@ -31,19 +31,23 @@ app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.CALLBACK_URL || 'http://localhost:3000/auth/google/callback'
-},
-    function (accessToken, refreshToken, profile, done) {
-        if (profile.emails && profile.emails[0].value === 'daniel.gajdos@gmail.com') {
-            return done(null, profile);
-        } else {
-            return done(null, false, { message: 'Unauthorized email' });
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    passport.use(new GoogleStrategy({
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: process.env.CALLBACK_URL || 'http://localhost:3000/auth/google/callback'
+    },
+        function (accessToken, refreshToken, profile, done) {
+            if (profile.emails && profile.emails[0].value === 'daniel.gajdos@gmail.com') {
+                return done(null, profile);
+            } else {
+                return done(null, false, { message: 'Unauthorized email' });
+            }
         }
-    }
-));
+    ));
+} else {
+    console.warn('WARNING: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET missing. Auth will fail.');
+}
 
 // -- Middleware to check Auth --
 function ensureAuthenticated(req, res, next) {

@@ -54,6 +54,9 @@ async function startBot() {
 
     log('Starting BSC Arbitrage Bot...', 'info');
     log(`Mode: ${config.SIMULATION_MODE ? 'SIMULATION' : 'LIVE'}`, 'info');
+    if (config.SAFE_MODE) {
+        log(`SAFE MODE: ON (Max Trade: $${config.SAFE_CONFIG.MAX_TRADE_AMOUNT_USD}, Min Profit: ${config.SAFE_CONFIG.MIN_PROFIT_PERCENT}%)`, 'success');
+    }
     log(`RPC: ${config.RPC_URL}`, 'info');
 
     const provider = new ethers.JsonRpcProvider(config.RPC_URL);
