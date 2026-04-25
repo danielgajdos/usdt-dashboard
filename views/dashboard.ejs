@@ -68,6 +68,14 @@
                     class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded shadow-lg transition flex items-center gap-2">
                     <span id="startIcon">▶</span> Start Bot
                 </button>
+                <button id="stopBtn"
+                    class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded shadow-lg transition flex items-center gap-2">
+                    ⏸ Pause
+                </button>
+                <button id="emergencyBtn"
+                    class="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-4 rounded shadow-lg transition flex items-center gap-2">
+                    🚨 STOP & CLOSE ALL
+                </button>
                 <div class="flex items-center gap-2 bg-gray-800 px-4 py-2 rounded border border-gray-700">
                     <div class="w-3 h-3 rounded-full bg-red-500" id="status-dot"></div>
                     <span class="text-sm font-bold text-gray-300" id="status-text">OFFLINE</span>
@@ -388,6 +396,26 @@
         const data = await res.json();
         if (data.success) {
             alert('Bot Started!');
+        }
+    });
+
+    // Pause Handler
+    document.getElementById('stopBtn').addEventListener('click', async () => {
+        if (!confirm('Pause the bot? Entries halt; open positions remain and will resume trailing exits when restarted.')) return;
+        const res = await fetch('/api/stop', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) alert('Bot paused.');
+    });
+
+    // Emergency Stop & Close All
+    document.getElementById('emergencyBtn').addEventListener('click', async () => {
+        if (!confirm('EMERGENCY STOP: This will market-sell ALL open positions immediately and halt entries for 24h. Continue?')) return;
+        const res = await fetch('/api/emergency-stop', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert(`Emergency stop complete: ${data.closed} closed, ${data.failed} failed. Entries halted for 24h.`);
+        } else {
+            alert('Emergency stop FAILED: ' + (data.error || 'unknown'));
         }
     });
 

@@ -1,27 +1,28 @@
 const storage = require('./storage');
+const config = require('./config');
 
 let state = {
-    cashBalance: 1000.00, // Initial USD
-    investedBalance: 0.00,
-    totalValue: 1000.00,
+    cashBalance: 0.00,              // Synced from real USDT on-chain balance at startup
+    investedBalance: 0.00,          // Sum of open position initial investments
+    totalValue: 0.00,
     pnl: 0.00,
-    startEquity: 1000.00, // Tracks initial for % calc
+    startEquity: 0.00,
     startTime: new Date().toISOString(),
     totalGasPaid: 0.00,
     totalFeesPaid: 0.00,
-    positions: [],
-    history: [],
-    snapshots: [] // { time, value, pnl }
+    positions: [],                  // see openPosition for shape
+    history: [],                    // closed trades
+    snapshots: []
 };
 
-const GAS_FEE_USD = 0.50; // Estimated Gas per tx
-const SWAP_FEE_PCT = 0.0025; // 0.25% PancakeSwap Fee
+function _gasFee() { return config.COSTS.GAS_PER_TX_USD; }
+function _swapFeePct() { return config.COSTS.SWAP_FEE_PCT / 100; }
 
 const portfolio = {
     init: () => {
-        const loadedState = storage.loadState();
-        if (loadedState) {
-            state = { ...state, ...loadedState };
+        const loaded = storage.loadState();
+        if (loaded) {
+            state = { ...state, ...loaded };
             console.log('Portfolio state loaded from storage.');
         } else {
             console.log('No previous state found, starting fresh.');
@@ -29,11 +30,10 @@ const portfolio = {
     },
 
     getPortfolio: () => {
-        // Calculate Metrics
         const currentEquity = state.cashBalance + state.investedBalance;
-        const totalReturnPct = ((currentEquity - state.startEquity) / state.startEquity) * 100;
-
-        // Avg Daily % (Simple Calc for short duration: Total % / Days Active)
+        const totalReturnPct = state.startEquity > 0
+            ? ((currentEquity - state.startEquity) / state.startEquity) * 100
+            : 0;
         const daysActive = Math.max(0.001, (new Date() - new Date(state.startTime)) / (1000 * 60 * 60 * 24));
         const avgDailyPct = totalReturnPct / daysActive;
 
@@ -42,7 +42,7 @@ const portfolio = {
             totalValue: currentEquity,
             pnl: state.pnl,
             metrics: {
-                initialCap: parseFloat(state.startEquity.toFixed(2)), // FIXED: Rounding
+                initialCap: parseFloat(state.startEquity.toFixed(2)),
                 totalReturnPct,
                 avgDailyPct,
                 daysActive
@@ -52,28 +52,19 @@ const portfolio = {
 
     setCashBalance: (amount) => {
         state.cashBalance = parseFloat(amount);
-        state.startEquity = state.cashBalance + state.investedBalance; // Reset start equity on sync
+        state.startEquity = state.cashBalance + state.investedBalance;
         state.totalValue = state.startEquity;
-        state.startTime = new Date().toISOString(); // Reset timer
-        // Take initial snapshot
+        state.startTime = new Date().toISOString();
         portfolio.takeSnapshot();
         storage.saveState(state);
     },
 
     syncBalance: (newBalance) => {
-        const currentCash = state.cashBalance;
-        const diff = newBalance - currentCash;
-
-        // If difference is significant (e.g. > $1), assume external deposit/withdraw
+        const diff = newBalance - state.cashBalance;
         if (Math.abs(diff) > 1.0) {
-            console.log(`[Portfolio] DETECTED EXTERNAL BALANCE CHANGE: ${diff > 0 ? '+' : ''}$${diff.toFixed(2)}`);
-
+            console.log(`[Portfolio] External balance change detected: ${diff > 0 ? '+' : ''}$${diff.toFixed(2)}`);
             state.cashBalance = newBalance;
-            // Adjust Start Equity so PnL % remains accurate (as if we started with more/less)
-            // Or alternatively, we could treat it as a "transfer" and not affect PnL, 
-            // but increasing startEquity is the simplest way to keep ROI honest.
             state.startEquity += diff;
-
             state.totalValue = state.cashBalance + state.investedBalance;
             storage.saveState(state);
         }
@@ -83,114 +74,135 @@ const portfolio = {
         const equity = state.cashBalance + state.investedBalance;
         state.snapshots.push({
             time: new Date().toISOString(),
-            equity: equity,
+            equity,
             pnl: state.pnl
         });
-        // Keep last 1000 snapshots
         if (state.snapshots.length > 1000) state.snapshots.shift();
         storage.saveState(state);
     },
 
-    openPosition: (strategy, tokenAddress, amountUSD) => {
-        // Check for funds
-        const cost = amountUSD + GAS_FEE_USD;
+    // Open a position with real execution data.
+    // args: { strategy, token, symbol, amountEur, entryPrice, txHash, stopLossPct, takeProfitPct, decisionScore }
+    openPosition: (args) => {
+        const gasFee = _gasFee();
+        const swapFee = args.amountEur * _swapFeePct();
+        const cost = args.amountEur + gasFee;
+
         if (state.cashBalance < cost) {
-            return { success: false, reason: 'Insufficient Funds' };
+            return { success: false, reason: 'Insufficient cash' };
         }
 
-        // Deduct Entry
         state.cashBalance -= cost;
-        state.investedBalance += amountUSD;
-        state.totalGasPaid += GAS_FEE_USD;
-        state.totalFeesPaid += (amountUSD * SWAP_FEE_PCT);
-        state.totalValue -= GAS_FEE_USD + (amountUSD * SWAP_FEE_PCT); // Immediate PnL hit from fees
+        state.investedBalance += args.amountEur;
+        state.totalGasPaid += gasFee;
+        state.totalFeesPaid += swapFee;
 
         const position = {
-            strategy,
-            token: tokenAddress,
-            entryPrice: 'Unknown (Sim)',
-            amountUSD: amountUSD * (1 - SWAP_FEE_PCT), // Actual value after fee
-            initialInvestment: amountUSD,
+            strategy: args.strategy,
+            token: args.token,
+            symbol: args.symbol || null,
+            entryPrice: args.entryPrice,
+            initialInvestment: args.amountEur,
+            amountEur: args.amountEur,
+            amountTokens: args.amountTokens || null,
+            entryTxHash: args.txHash || null,
+            stopLossPct: args.stopLossPct || config.EXITS.STOP_LOSS_PCT,
+            takeProfitPct: args.takeProfitPct || config.EXITS.TAKE_PROFIT_PCT,
+            highWaterMark: args.entryPrice,
+            tookTP1: false,
+            decisionScore: args.decisionScore || null,
             timestamp: new Date().toISOString(),
             status: 'OPEN'
         };
 
         state.positions.push(position);
         storage.saveState(state);
-
-        return {
-            success: true,
-            position,
-            amount: amountUSD,
-            costs: { gas: GAS_FEE_USD, fee: amountUSD * SWAP_FEE_PCT }
-        };
+        return { success: true, position };
     },
 
-    recordAtomicTrade: (pnl, txHash) => {
-        state.pnl += pnl;
-        state.cashBalance += pnl; // Update cash (simplified)
-        state.totalValue = state.cashBalance + state.investedBalance;
-
-        state.history.unshift({
-            time: new Date().toISOString(),
-            type: 'ARBITRAGE',
-            strategy: 'Arbitrage', // Added strategy field for consistency
-            token: 'BNB/USDT',
-            amount: 0, // No position held
-            price: 'N/A',
-            pnl: pnl,
-            txHash: txHash
-        });
-
-        // Keep history size manageable
-        if (state.history.length > 50) state.history.pop();
-        storage.saveState(state);
+    // Update high-water mark on each tick (used for trailing stops).
+    updateHighWaterMark: (tokenAddress, currentPrice) => {
+        const pos = state.positions.find(p => p.token.toLowerCase() === tokenAddress.toLowerCase());
+        if (pos && currentPrice > (pos.highWaterMark || 0)) {
+            pos.highWaterMark = currentPrice;
+            storage.saveState(state);
+        }
     },
 
-    closePosition: (tokenAddress, exitValueUSD) => {
+    markTP1: (tokenAddress) => {
+        const pos = state.positions.find(p => p.token.toLowerCase() === tokenAddress.toLowerCase());
+        if (pos) {
+            pos.tookTP1 = true;
+            storage.saveState(state);
+        }
+    },
+
+    // Close position using the REAL exit value from executed sell.
+    closePosition: (tokenAddress, exitValueEur, exitTxHash, reason = '') => {
         const idx = state.positions.findIndex(p => p.token.toLowerCase() === tokenAddress.toLowerCase());
         if (idx === -1) return { success: false, reason: 'Position not found' };
 
         const pos = state.positions[idx];
+        const gasFee = _gasFee();
+        const swapFee = exitValueEur * _swapFeePct();
+        const netProceeds = exitValueEur - gasFee; // exitValueEur already net of swap fee if from real amountOut
 
-        // Calculate Exit Details
-        const exitFee = exitValueUSD * SWAP_FEE_PCT;
-        const netProceeds = exitValueUSD - exitFee - GAS_FEE_USD;
-
-        // Update Portfolio
         state.cashBalance += netProceeds;
-        state.investedBalance -= pos.initialInvestment; // Remove original cost from invested
-        state.totalGasPaid += GAS_FEE_USD;
-        state.totalFeesPaid += exitFee;
+        state.investedBalance -= pos.initialInvestment;
+        state.totalGasPaid += gasFee;
+        state.totalFeesPaid += swapFee;
 
-        // PnL Calculation
-        const pnl = netProceeds - pos.initialInvestment; // Net PnL
+        const pnl = netProceeds - pos.initialInvestment;
         const pnlPercent = (pnl / pos.initialInvestment) * 100;
 
-        // Record History
-        const historyEntry = {
+        state.history.unshift({
             token: pos.token,
+            symbol: pos.symbol,
             strategy: pos.strategy,
             entryTime: pos.timestamp,
             exitTime: new Date().toISOString(),
             investment: pos.initialInvestment,
             exitValue: netProceeds,
-            pnl: pnl,
-            pnlPercent: pnlPercent,
-            result: pnl > 0 ? 'WIN' : 'LOSS'
-        };
+            entryPrice: pos.entryPrice,
+            exitPrice: pos.amountTokens ? exitValueEur / pos.amountTokens : null,
+            pnl,
+            pnlPercent,
+            result: pnl > 0 ? 'WIN' : 'LOSS',
+            reason,
+            entryTxHash: pos.entryTxHash,
+            exitTxHash
+        });
+        if (state.history.length > 100) state.history.pop();
 
-        state.history.unshift(historyEntry); // Add to top
-        if (state.history.length > 50) state.history.pop();
-
-        // Update Total Value PnL tracking for dashboard (optional, but getPortfolio derives it)
         state.pnl += pnl;
-
-        // Remove from Open Positions
         state.positions.splice(idx, 1);
         storage.saveState(state);
 
-        return { success: true, pnl };
+        return { success: true, pnl, pnlPercent };
+    },
+
+    getOpenPositions: () => state.positions.slice(),
+
+    getMetrics: () => {
+        const closed = state.history;
+        const wins = closed.filter(t => t.pnl > 0);
+        const losses = closed.filter(t => t.pnl <= 0);
+        const grossWin = wins.reduce((s, t) => s + t.pnl, 0);
+        const grossLoss = -losses.reduce((s, t) => s + t.pnl, 0);
+        const profitFactor = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : 0);
+        const winRate = closed.length > 0 ? wins.length / closed.length : 0;
+
+        return {
+            tradesClosed: closed.length,
+            wins: wins.length,
+            losses: losses.length,
+            winRate,
+            profitFactor,
+            grossWin,
+            grossLoss,
+            totalPnl: state.pnl,
+            openPositions: state.positions.length
+        };
     }
 };
 

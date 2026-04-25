@@ -1,0 +1,198 @@
+const config = require('./config');
+
+// State kept in-memory: cooldowns and daily PnL tracking.
+const state = {
+    cooldowns: new Map(),               // tokenLower -> Date.now() unlock
+    dailyStart: { day: null, equity: 0 },
+    halted: false,
+    haltReason: null,
+    haltedUntil: 0
+};
+
+function _today() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function _cap() {
+    return config.RISK.SHADOW_LIVE_CAP_EUR !== null
+        ? config.RISK.SHADOW_LIVE_CAP_EUR
+        : config.RISK.MAX_POSITION_EUR;
+}
+
+// Compute recommended position size for a decision, Kelly-lite.
+// cash is current available EUR (portfolio.cashBalance).
+function sizePosition(score, cash) {
+    const confMult = 0.5 + score / 100; // 0.5 at score=0, 1.5 at score=100
+    const base = cash * (config.RISK.BASE_RISK_PCT / 100);
+    let size = base * confMult;
+    size = Math.min(size, _cap());
+    size = Math.max(size, 0);
+    return size;
+}
+
+// Update daily equity reference at start of each UTC day.
+function rollDay(currentEquity) {
+    const today = _today();
+    if (state.dailyStart.day !== today) {
+        state.dailyStart = { day: today, equity: currentEquity };
+    }
+}
+
+function getDailyDrawdownPct(currentEquity) {
+    if (!state.dailyStart.day || state.dailyStart.equity === 0) return 0;
+    return ((currentEquity - state.dailyStart.equity) / state.dailyStart.equity) * 100;
+}
+
+function halt(reason, durationMs = 24 * 60 * 60 * 1000) {
+    state.halted = true;
+    state.haltReason = reason;
+    state.haltedUntil = Date.now() + durationMs;
+}
+
+function resume() {
+    state.halted = false;
+    state.haltReason = null;
+    state.haltedUntil = 0;
+}
+
+function isHalted() {
+    if (state.halted && Date.now() > state.haltedUntil) {
+        resume();
+    }
+    return state.halted;
+}
+
+function recordLoss(tokenAddress) {
+    state.cooldowns.set(
+        tokenAddress.toLowerCase(),
+        Date.now() + config.RISK.COOLDOWN_AFTER_LOSS_SECONDS * 1000
+    );
+}
+
+function onCooldown(tokenAddress) {
+    const until = state.cooldowns.get(tokenAddress.toLowerCase());
+    if (!until) return false;
+    if (Date.now() > until) {
+        state.cooldowns.delete(tokenAddress.toLowerCase());
+        return false;
+    }
+    return true;
+}
+
+// Main gate: can we open this position?
+// decision: { token, sizeEur, ... }
+// portfolio: { cashBalance, investedBalance, positions, totalValue }
+// bnbBalance: in BNB units (float)
+function canOpen(decision, portfolio, bnbBalance) {
+    if (config.STOP_BOT) return { ok: false, reason: 'STOP_BOT flag set' };
+    if (isHalted()) return { ok: false, reason: `halted: ${state.haltReason}` };
+
+    // Daily circuit breaker
+    rollDay(portfolio.totalValue);
+    const ddPct = getDailyDrawdownPct(portfolio.totalValue);
+    if (ddPct <= -config.RISK.MAX_DAILY_LOSS_PCT) {
+        halt(`daily drawdown ${ddPct.toFixed(2)}% breached`);
+        return { ok: false, reason: `daily DD ${ddPct.toFixed(2)}%` };
+    }
+
+    // Gas reserve check
+    if (bnbBalance !== undefined && bnbBalance < config.RISK.MIN_BNB_GAS_RESERVE) {
+        return { ok: false, reason: `BNB gas reserve too low: ${bnbBalance}` };
+    }
+
+    // Cash reserve
+    const needed = decision.sizeEur + config.COSTS.GAS_PER_TX_USD; // gas ~ USD ~ EUR close enough
+    if (portfolio.cashBalance - needed < config.RISK.MIN_CASH_RESERVE_EUR) {
+        return { ok: false, reason: 'cash reserve would be breached' };
+    }
+
+    // Position size bounds
+    if (decision.sizeEur < config.RISK.MIN_POSITION_EUR) {
+        return { ok: false, reason: `size €${decision.sizeEur.toFixed(2)} < MIN €${config.RISK.MIN_POSITION_EUR}` };
+    }
+    if (decision.sizeEur > _cap()) {
+        return { ok: false, reason: `size €${decision.sizeEur.toFixed(2)} > cap €${_cap()}` };
+    }
+
+    // Concurrent positions cap
+    if (portfolio.positions.length >= config.RISK.MAX_CONCURRENT_POSITIONS) {
+        return { ok: false, reason: `${portfolio.positions.length} positions >= max ${config.RISK.MAX_CONCURRENT_POSITIONS}` };
+    }
+
+    // Total exposure cap
+    const exposurePct = ((portfolio.investedBalance + decision.sizeEur) / portfolio.totalValue) * 100;
+    if (exposurePct > config.RISK.MAX_EXPOSURE_PCT) {
+        return { ok: false, reason: `exposure ${exposurePct.toFixed(1)}% > max ${config.RISK.MAX_EXPOSURE_PCT}%` };
+    }
+
+    // Single-token exposure cap (stacking)
+    const existingInToken = portfolio.positions
+        .filter(p => p.token.toLowerCase() === decision.token.toLowerCase())
+        .reduce((s, p) => s + p.initialInvestment, 0);
+    const tokenExposurePct = ((existingInToken + decision.sizeEur) / portfolio.totalValue) * 100;
+    if (tokenExposurePct > config.RISK.MAX_SINGLE_TOKEN_EXPOSURE_PCT) {
+        return { ok: false, reason: `token exposure ${tokenExposurePct.toFixed(1)}% > max ${config.RISK.MAX_SINGLE_TOKEN_EXPOSURE_PCT}%` };
+    }
+
+    // Cooldown
+    if (onCooldown(decision.token)) {
+        return { ok: false, reason: 'token on cooldown after recent loss' };
+    }
+
+    return { ok: true };
+}
+
+// Check if a position should be exited. Returns {shouldExit, reason} or {shouldExit: false}.
+function shouldExit(position, currentPrice, currentAtr) {
+    if (!position || !position.entryPrice) return { shouldExit: false };
+    if (!currentPrice || currentPrice <= 0) return { shouldExit: false };
+
+    const pnlPct = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
+    const ageMin = (Date.now() - new Date(position.timestamp).getTime()) / 60000;
+
+    // Stop-loss
+    if (pnlPct <= -config.EXITS.STOP_LOSS_PCT) {
+        return { shouldExit: true, reason: `SL hit (${pnlPct.toFixed(2)}%)` };
+    }
+
+    // Take-profit (first touch)
+    if (!position.tookTP1 && pnlPct >= config.EXITS.TAKE_PROFIT_PCT) {
+        return { shouldExit: true, reason: `TP hit (${pnlPct.toFixed(2)}%)`, partial: 0.5 };
+    }
+
+    // Trailing stop after TP1
+    if (position.tookTP1 && position.highWaterMark && currentAtr) {
+        const trail = position.highWaterMark - config.EXITS.TRAIL_ATR_MULTIPLE * currentAtr;
+        if (currentPrice < trail) {
+            return { shouldExit: true, reason: `trail stop (${pnlPct.toFixed(2)}%)` };
+        }
+    }
+
+    // Time stop
+    if (ageMin >= config.EXITS.MAX_HOLD_MINUTES) {
+        return { shouldExit: true, reason: `time stop (${ageMin.toFixed(0)}min)` };
+    }
+
+    return { shouldExit: false };
+}
+
+function resetState() {
+    state.cooldowns.clear();
+    state.dailyStart = { day: null, equity: 0 };
+    resume();
+}
+
+module.exports = {
+    sizePosition,
+    canOpen,
+    shouldExit,
+    recordLoss,
+    onCooldown,
+    halt,
+    resume,
+    isHalted,
+    rollDay,
+    getDailyDrawdownPct,
+    resetState,
+    _internalState: state
+};

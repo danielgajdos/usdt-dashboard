@@ -1,46 +1,50 @@
 const { ethers } = require('ethers');
 const chalk = require('chalk');
 const config = require('./config');
-const { checkArbitrage } = require('./priceMonitor');
-const { startSniper } = require('./sniper');
-const { startCopyTrader } = require('./copyTrader');
-const portfolio = require('./portfolio'); // Import Portfolio
+const { TOKENS } = require('./tokens');
+const portfolio = require('./portfolio');
+const marketData = require('./marketData');
+const signalEngine = require('./signalEngine');
+const riskManager = require('./riskManager');
+const honeypot = require('./safety/honeypot');
+const execution = require('./execution');
 
-// Shared state for the web dashboard
+// Register strategies
+const momentumStrategy = require('./strategies/momentum');
+signalEngine.register(momentumStrategy);
+
 const botState = {
     isRunning: false,
-    mode: config.SIMULATION_MODE ? 'SIMULATION' : 'REAL',
+    mode: config.SIMULATION_MODE ? 'SIMULATION' : 'LIVE',
     walletBalance: '0.00',
+    walletBalanceUSDT: '0.00',
     logs: [],
     opportunities: [],
     network: 'Disconnected',
-    portfolio: portfolio.getPortfolio(), // Add Portfolio to State
+    portfolio: portfolio.getPortfolio(),
     stats: {
         checks: 0,
-        opportunities: 0,
+        decisionsGenerated: 0,
+        decisionsExecuted: 0,
+        opportunities: 0,        // entries actually executed (dashboard compat)
         lastCheck: null
     }
 };
 
 function log(message, type = 'info') {
-    const timestamp = new Date().toISOString(); // Use ISO for frontend formatting
-    const logEntry = { time: timestamp, message, type };
+    const timestamp = new Date().toISOString();
+    const entry = { time: timestamp, message, type };
+    botState.logs.unshift(entry);
+    if (botState.logs.length > 200) botState.logs.pop();
 
-    // Keep last 100 logs
-    botState.logs.unshift(logEntry);
-    if (botState.logs.length > 100) botState.logs.pop();
-
-    // If it's a "success" (Finding), add to opportunities
     if (type === 'success') {
-        botState.opportunities.unshift(logEntry);
-        botState.stats.opportunities++; // Increment global counter
-        // Keep last 50 opportunities
+        botState.opportunities.unshift(entry);
         if (botState.opportunities.length > 50) botState.opportunities.pop();
     }
 
-    // Also log to console
     if (type === 'error') console.error(chalk.red(`[${timestamp}] ${message}`));
     else if (type === 'success') console.log(chalk.green(`[${timestamp}] ${message}`));
+    else if (type === 'warning') console.log(chalk.yellow(`[${timestamp}] ${message}`));
     else console.log(`[${timestamp}] ${message}`);
 }
 
@@ -48,217 +52,282 @@ async function startBot() {
     if (botState.isRunning) return;
     botState.isRunning = true;
 
-    // Load previous state if available
     portfolio.init();
 
+    log(`Starting BSC Momentum Bot (${botState.mode})`, 'info');
+    log(`Strategies registered: ${signalEngine.listStrategies().join(', ')}`, 'info');
+    log(`Universe: ${TOKENS.map(t => t.symbol).join(', ')}`, 'info');
+    log(`Risk: €${config.RISK.MAX_POSITION_EUR} max/pos × ${config.RISK.MAX_CONCURRENT_POSITIONS} pos, SL ${config.EXITS.STOP_LOSS_PCT}% / TP ${config.EXITS.TAKE_PROFIT_PCT}%`, 'info');
 
-    log('Starting BSC Arbitrage Bot...', 'info');
-    log(`Mode: ${config.SIMULATION_MODE ? 'SIMULATION' : 'LIVE'}`, 'info');
-    if (config.SAFE_MODE) {
-        log(`SAFE MODE: ON (Max Trade: $${config.SAFE_CONFIG.MAX_TRADE_AMOUNT_USD}, Min Profit: ${config.SAFE_CONFIG.MIN_PROFIT_PERCENT}%)`, 'success');
+    if (config.RISK.SHADOW_LIVE_CAP_EUR !== null) {
+        log(`⚠ SHADOW LIVE MODE: position cap reduced to €${config.RISK.SHADOW_LIVE_CAP_EUR}`, 'warning');
     }
-    log(`RPC: ${config.RPC_URL}`, 'info');
+
+    if (config.STOP_BOT) {
+        log('⚠ STOP_BOT flag is set — no entries will be executed.', 'warning');
+    }
 
     const provider = new ethers.JsonRpcProvider(config.RPC_URL);
     let signer = null;
 
     if (!config.SIMULATION_MODE) {
         if (!config.PRIVATE_KEY) {
-            log('CRITICAL: Real Mode selected but no PRIVATE_KEY found.', 'error');
+            log('CRITICAL: Live mode but PRIVATE_KEY not set. Halting.', 'error');
             botState.isRunning = false;
             return;
         }
         signer = new ethers.Wallet(config.PRIVATE_KEY, provider);
-        log(`Using Wallet: ${signer.address}`, 'success');
-
-        // Ensure signer is connected to provider
-        signer = signer.connect(provider);
+        log(`Wallet: ${signer.address}`, 'success');
     }
 
     try {
         const network = await provider.getNetwork();
         botState.network = `Chain ID: ${network.chainId}`;
-        log(`Connected to ${botState.network}`, 'success');
+        log(`Connected: ${botState.network}`, 'success');
 
         if (signer) {
-            const balance = await provider.getBalance(signer.address);
-            botState.walletBalance = ethers.formatEther(balance);
-
-            // Fetch Initial USDT
-            const execution = require('./execution');
+            const bnb = await provider.getBalance(signer.address);
+            botState.walletBalance = ethers.formatEther(bnb);
             botState.walletBalanceUSDT = await execution.getUSDTBalance(signer);
 
-            // Sync Portfolio Cash with Real Balance
             portfolio.setCashBalance(botState.walletBalanceUSDT);
-            log(`Synced Portfolio Cash: $${parseFloat(botState.walletBalanceUSDT).toFixed(2)}`, 'success');
+            log(`Balance: ${parseFloat(botState.walletBalance).toFixed(4)} BNB | ${parseFloat(botState.walletBalanceUSDT).toFixed(2)} USDT`, 'info');
 
-            log(`Wallet Balance: ${botState.walletBalance} BNB | ${botState.walletBalanceUSDT} USDT`, 'info');
-            if (balance === 0n) log('WARNING: 0 BNB for Gas!', 'error');
+            if (parseFloat(botState.walletBalance) < config.RISK.MIN_BNB_GAS_RESERVE) {
+                log(`⚠ BNB gas reserve below ${config.RISK.MIN_BNB_GAS_RESERVE} — entries will be blocked until topped up.`, 'warning');
+            }
         }
-
-    } catch (error) {
+    } catch (err) {
         botState.network = 'Connection Failed';
-        log('Failed to connect to RPC: ' + error.message, 'error');
+        log(`RPC connection failed: ${err.message}`, 'error');
         botState.isRunning = false;
         return;
     }
 
-    // Start Liquidity Sniper if enabled
-    if (config.SNIPE_MODE) {
-        startSniper(provider, log, (strategy, token, amount) => {
-            return portfolio.openPosition(strategy, token, amount);
-        });
-    }
+    // Set initial portfolio state for riskManager daily-reset
+    const initialEquity = portfolio.getPortfolio().totalValue;
+    riskManager.rollDay(initialEquity);
 
-    // Start Copy Trader if enabled
-    if (config.COPY_MODE) {
-        startCopyTrader(provider, log, async (type, token, alias, txHash) => {
-            const execution = require('./execution'); // Late import to avoid circular dep issues
-
-            if (type === 'ENTRY') {
-                // Dynamic Sizing: 20% of Cash (Simulated or Real)
-                // For Real: We use 20% of Portfolio Cash (Simulated tracking) as the bet size to be safe initially
-                // Or should we check real balance? Let's check Portfolio cash for safety logic first.
-                const currentCash = botState.portfolio.cashBalance;
-                const tradeSize = Math.max(10, currentCash * 0.20);
-
-                let success = false;
-                let realTxHash = null;
-
-                // --- REAL EXECUTION ---
-                if (!config.SIMULATION_MODE && signer) {
-                    log(`[REAL] Attempting to Buy $${tradeSize.toFixed(2)} of ${token}...`, 'info');
-                    const realResult = await execution.executeBuy(signer, token, tradeSize);
-
-                    if (realResult.success) {
-                        success = true;
-                        realTxHash = realResult.txHash;
-                        log(`[REAL] Buy Confirmed: ${realTxHash}`, 'success');
-                    } else {
-                        log(`[REAL] Buy Failed: ${realResult.error}`, 'error');
-                    }
-                } else {
-                    // Simulation always succeeds for now
-                    success = true;
-                }
-
-                // --- UPDATE PORTFOLIO (Shadow or Sim) ---
-                if (success) {
-                    const result = portfolio.openPosition('CopyTrading', token, tradeSize);
-                    if (result.success) {
-                        // If Real, we might want to override the txHash or note it
-                        const msg = `[COPY] ${alias} BUY ${token.slice(0, 6)}... | Bet: $${result.amount.toFixed(2)}`;
-                        log(msg, 'success');
-                    }
-                }
-
-            } else if (type === 'EXIT') {
-                // Find position
-                const pos = botState.portfolio.positions.find(p => p.token.toLowerCase() === token.toLowerCase());
-
-                if (pos) {
-                    let success = false;
-                    let realPnL = null;
-
-                    // --- REAL EXECUTION ---
-                    if (!config.SIMULATION_MODE && signer) {
-                        log(`[REAL] Attempting to Sell ${token}...`, 'info');
-                        const realResult = await execution.executeSell(signer, token);
-
-                        if (realResult.success) {
-                            success = true;
-                            log(`[REAL] Sell Confirmed: ${realResult.txHash}`, 'success');
-                            // We could calc real PnL here if we knew exact amounts, 
-                            // but portfolio update below handles the logic for dashboard consistency
-                        } else {
-                            log(`[REAL] Sell Failed: ${realResult.error}`, 'error');
-                        }
-                    } else {
-                        success = true;
-                    }
-
-                    // --- UPDATE PORTFOLIO (Shadow or Sim) ---
-                    if (success) {
-                        // Simulate Market Movement for PnL tracking consistency
-                        // (Unless we fetch real amounts, which is complex for now)
-                        const volatility = (Math.random() * 0.20) - 0.05;
-                        const exitValue = pos.initialInvestment * (1 + volatility);
-
-                        const result = portfolio.closePosition(token, exitValue);
-                        if (result.success) {
-                            const msg = `[COPY] ${alias} SELL ${token.slice(0, 6)}... | PnL: $${result.pnl.toFixed(2)} (${result.pnl > 0 ? '+' : ''}${((result.pnl / pos.initialInvestment) * 100).toFixed(1)}%)`;
-                            log(msg, result.pnl > 0 ? 'success' : 'error');
-                        }
-                    }
-                }
-            }
-
-            botState.portfolio = portfolio.getPortfolio(); // Update state
-        }, getHoldings);
-    }
-
-    // Helper to get current holdings for Copy Trader
-    function getHoldings() {
-        if (!botState.portfolio || !botState.portfolio.positions) return [];
-        return botState.portfolio.positions.map(p => p.token.toLowerCase());
-    }
-
-    // Loop for Arbitrage
+    // Main tick — runs every TICK_INTERVAL_MS
     setInterval(async () => {
         if (!botState.isRunning) return;
 
-        botState.stats.checks++;
-        botState.stats.lastCheck = new Date().toISOString(); // Use ISO for proper frontend formatting
-        // Update portfolio stats periodically too (e.g. if we had live price feeds)
-        botState.portfolio = portfolio.getPortfolio();
-
-        // Refresh Gas Balance & USDT (Simulate "Re-Sync")
-        if (signer) {
-            // BNB
-            const balance = await provider.getBalance(signer.address);
-            botState.walletBalance = ethers.formatEther(balance);
-
-            // USDT (Real-time Sync)
-            // We need execution module for this
-            const execution = require('./execution');
-            const usdtBal = await execution.getUSDTBalance(signer);
-            botState.walletBalanceUSDT = usdtBal;
-
-            // Sync with Portfolio (Detect Deposits)
-            portfolio.syncBalance(parseFloat(usdtBal));
+        try {
+            await tick(provider, signer);
+        } catch (err) {
+            log(`Tick error: ${err.message}`, 'error');
         }
-
-        const opportunityFound = await checkArbitrage(provider, log);
-        if (opportunityFound) {
-            log('Arbitrage Opportunity Detected! Executing...', 'success');
-
-            if (!config.SIMULATION_MODE && signer) {
-                const execution = require('./execution');
-                // Only trade if not already busy? (Simple await handles it)
-                const result = await execution.executeArbitrage(signer, log);
-                if (result.success) {
-                    // Estimate PnL (Simplified: 0.5% of trade size + gas cost covered)
-                    // In real world, we'd parse the receipt logs for exact amounts.
-                    const estimatedPnL = parseFloat(config.INVESTMENT_AMOUNT) * (parseFloat(config.TOKENS.WBNB_PRICE || 300)) * (0.005); // Rough sim
-                    // Or better: pass the profit from execution.js if possible. For now, just record a "Win".
-
-                    // Actually, let's just record a small positive result to confirm visibility
-                    portfolio.recordAtomicTrade(0.50, result.txHash); // $0.50 profit sim
-                    log(`[ARBITRAGE] Trade Recorded. PnL: +$0.50`, 'success');
-                }
-            } else {
-                log('Simulation Mode: Trade would be executed here.', 'info');
-                // Sim PnL
-                portfolio.recordAtomicTrade(0.50, '0xSIMULATED_HASH');
-            }
-
-        } else {
-            // Log heartbeat every 10 checks to avoid spamming the dashboard
-            if (botState.stats.checks % 10 === 0) {
-                log('Scanning... No opportunities found.', 'info');
-            }
-        }
-    }, 5000);
+    }, config.TICK_INTERVAL_MS);
 }
 
-module.exports = { startBot, botState };
+async function tick(provider, signer) {
+    botState.stats.checks++;
+    botState.stats.lastCheck = new Date().toISOString();
+    botState.portfolio = portfolio.getPortfolio();
+
+    // Refresh wallet balances every 5 ticks (~25s)
+    if (signer && botState.stats.checks % 5 === 0) {
+        try {
+            const bnb = await provider.getBalance(signer.address);
+            botState.walletBalance = ethers.formatEther(bnb);
+            const usdt = await execution.getUSDTBalance(signer);
+            botState.walletBalanceUSDT = usdt;
+            portfolio.syncBalance(parseFloat(usdt));
+        } catch {}
+    }
+
+    // Refresh market data for all universe tokens in parallel
+    await Promise.all(
+        TOKENS.map(t => marketData.refreshPrice(provider, t.address, t.decimals))
+    );
+
+    // 1. Check exits first (prioritize protecting capital over new entries)
+    await processExits(signer);
+
+    // 2. Scan for new entries
+    await processEntries(provider, signer);
+
+    // Periodic heartbeat
+    if (botState.stats.checks % 12 === 0) {
+        const m = portfolio.getMetrics();
+        const open = portfolio.getOpenPositions().length;
+        log(`Heartbeat: ${botState.stats.checks} ticks, ${m.tradesClosed} closed (${(m.winRate * 100).toFixed(0)}% win), ${open} open, PnL €${m.totalPnl.toFixed(2)}`, 'info');
+    }
+}
+
+async function processExits(signer) {
+    const positions = portfolio.getOpenPositions();
+    if (positions.length === 0) return;
+
+    for (const pos of positions) {
+        const indicators = marketData.computeIndicators(pos.token);
+        const currentPrice = indicators ? indicators.price : marketData.getLastPrice(pos.token);
+        if (!currentPrice) continue;
+
+        portfolio.updateHighWaterMark(pos.token, currentPrice);
+
+        const check = riskManager.shouldExit(pos, currentPrice, indicators ? indicators.atr : null);
+        if (!check.shouldExit) continue;
+
+        log(`EXIT ${pos.symbol || pos.token.slice(0, 8)}: ${check.reason}`, check.reason.startsWith('SL') ? 'error' : 'success');
+
+        const decision = signalEngine.emptyDecision({
+            action: 'EXIT',
+            strategy: 'EXIT',
+            token: pos.token,
+            symbol: pos.symbol,
+            reason: check.reason,
+            partial: check.partial || 1.0
+        });
+
+        const result = await execution.executeDecision(signer, decision);
+
+        if (!result.success) {
+            log(`Exit failed for ${pos.symbol}: ${result.error}`, 'error');
+            continue;
+        }
+
+        // Partial exit → mark TP1 and keep remaining position open
+        if (check.partial && check.partial < 1.0) {
+            portfolio.markTP1(pos.token);
+            log(`Partial exit ${(check.partial * 100).toFixed(0)}% of ${pos.symbol}: €${(result.exitValueEur || 0).toFixed(2)}`, 'success');
+        } else {
+            const exitEur = result.exitValueEur || pos.initialInvestment;
+            const closed = portfolio.closePosition(pos.token, exitEur, result.txHash, check.reason);
+            if (closed.success) {
+                const pnlColor = closed.pnl > 0 ? 'success' : 'error';
+                log(`Closed ${pos.symbol}: PnL €${closed.pnl.toFixed(2)} (${closed.pnlPercent.toFixed(2)}%) — ${check.reason}`, pnlColor);
+                if (closed.pnl <= 0) riskManager.recordLoss(pos.token);
+            }
+        }
+    }
+}
+
+async function processEntries(provider, signer) {
+    if (config.STOP_BOT) return;
+
+    const port = portfolio.getPortfolio();
+    const bnbBalance = parseFloat(botState.walletBalance);
+
+    // Generate decisions from all registered strategies
+    const ctx = { provider, signer, portfolio, log };
+    const decisions = await signalEngine.scan(ctx);
+
+    botState.stats.decisionsGenerated += decisions.length;
+
+    if (decisions.length === 0) return;
+
+    // Attach sizing and filter through risk manager
+    for (const decision of decisions) {
+        decision.sizeEur = riskManager.sizePosition(decision.score, port.cashBalance);
+
+        const gate = signalEngine.passesGate(decision, null);
+        if (!gate.ok) {
+            if (decision.score >= config.SIGNAL.MIN_SCORE) {
+                log(`[${decision.strategy}] ${decision.symbol} blocked: ${gate.reason}`, 'info');
+            }
+            continue;
+        }
+
+        const canOpen = riskManager.canOpen(decision, port, bnbBalance);
+        if (!canOpen.ok) {
+            log(`[${decision.strategy}] ${decision.symbol} risk block: ${canOpen.reason}`, 'info');
+            continue;
+        }
+
+        // Honeypot check (allowlisted tokens fast-path)
+        const hp = await honeypot.check(provider, decision.token, signer ? signer.address : null);
+        if (!hp.passed) {
+            log(`[${decision.strategy}] ${decision.symbol} honeypot rejected: ${hp.details.reason}`, 'warning');
+            continue;
+        }
+
+        log(`🎯 ENTER ${decision.symbol} — score ${decision.score}, edge ${decision.expectedEdgePct.toFixed(2)}%, size €${decision.sizeEur.toFixed(2)} | ${decision.reason}`, 'success');
+
+        const result = await execution.executeDecision(signer, decision);
+        if (!result.success) {
+            log(`[${decision.strategy}] execution failed: ${result.error}`, 'error');
+            continue;
+        }
+
+        botState.stats.decisionsExecuted++;
+        botState.stats.opportunities++;
+
+        portfolio.openPosition({
+            strategy: decision.strategy,
+            token: decision.token,
+            symbol: decision.symbol,
+            amountEur: decision.sizeEur,
+            entryPrice: result.entryPrice || 0,
+            amountTokens: result.amountTokens || null,
+            txHash: result.txHash,
+            stopLossPct: decision.stopLossPct,
+            takeProfitPct: decision.takeProfitPct,
+            decisionScore: decision.score
+        });
+
+        log(`✅ Opened ${decision.symbol}: ${result.amountTokens?.toFixed(4) || '?'} tokens @ ${result.entryPrice?.toFixed(6) || '?'} | tx: ${result.txHash}`, 'success');
+
+        // Refresh portfolio for subsequent decision checks in this tick
+        botState.portfolio = portfolio.getPortfolio();
+
+        // Only open one position per tick to spread risk and conserve gas
+        break;
+    }
+}
+
+// Emergency "STOP & CLOSE ALL" — fires market sells on every open position and
+// halts new entries. Used by the dashboard's red panic button.
+async function emergencyStopAndCloseAll() {
+    log('🚨 EMERGENCY STOP triggered — halting entries and closing all positions', 'error');
+    botState.isRunning = false;
+    riskManager.halt('emergency stop', 24 * 60 * 60 * 1000);
+
+    // We need a signer + provider; reconstruct from config.
+    let signer = null;
+    let provider = null;
+    try {
+        provider = new ethers.JsonRpcProvider(config.RPC_URL);
+        if (config.PRIVATE_KEY) signer = new ethers.Wallet(config.PRIVATE_KEY, provider);
+    } catch (err) {
+        log(`Emergency: could not init signer: ${err.message}`, 'error');
+    }
+
+    const positions = portfolio.getOpenPositions();
+    const results = [];
+
+    for (const pos of positions) {
+        const decision = signalEngine.emptyDecision({
+            action: 'EXIT',
+            strategy: 'EMERGENCY',
+            token: pos.token,
+            symbol: pos.symbol,
+            partial: 1.0,
+            reason: 'emergency stop'
+        });
+        try {
+            const r = await execution.executeDecision(signer, decision);
+            if (r.success) {
+                const exitEur = r.exitValueEur || pos.initialInvestment;
+                portfolio.closePosition(pos.token, exitEur, r.txHash, 'emergency stop');
+                log(`Emergency closed ${pos.symbol}: tx ${r.txHash}`, 'success');
+                results.push({ token: pos.token, symbol: pos.symbol, success: true, txHash: r.txHash });
+            } else {
+                log(`Emergency close FAILED for ${pos.symbol}: ${r.error}`, 'error');
+                results.push({ token: pos.token, symbol: pos.symbol, success: false, error: r.error });
+            }
+        } catch (err) {
+            log(`Emergency close exception ${pos.symbol}: ${err.message}`, 'error');
+            results.push({ token: pos.token, symbol: pos.symbol, success: false, error: err.message });
+        }
+    }
+
+    return { closed: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length, results };
+}
+
+function stopBot() {
+    botState.isRunning = false;
+    log('Bot stopped (entries halted, open positions still trail their exits when restarted)', 'warning');
+}
+
+module.exports = { startBot, stopBot, emergencyStopAndCloseAll, botState };

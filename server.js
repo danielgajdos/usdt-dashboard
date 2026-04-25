@@ -4,7 +4,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const path = require('path');
 const dotenv = require('dotenv');
-const { startBot, botState } = require('./index');
+const { startBot, stopBot, emergencyStopAndCloseAll, botState } = require('./index');
 
 dotenv.config();
 
@@ -88,6 +88,21 @@ app.get('/dashboard', ensureAuthenticated, (req, res) => {
 app.post('/api/start', ensureAuthenticated, (req, res) => {
     startBot();
     res.json({ success: true, message: 'Bot started' });
+});
+
+app.post('/api/stop', ensureAuthenticated, (req, res) => {
+    stopBot();
+    res.json({ success: true, message: 'Bot stopped (entries halted)' });
+});
+
+// EMERGENCY: market-sell every open position and halt entries for 24h.
+app.post('/api/emergency-stop', ensureAuthenticated, async (req, res) => {
+    try {
+        const result = await emergencyStopAndCloseAll();
+        res.json({ success: true, ...result });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 app.get('/api/status', ensureAuthenticated, (req, res) => {
