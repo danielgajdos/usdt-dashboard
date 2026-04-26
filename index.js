@@ -11,7 +11,13 @@ const execution = require('./execution');
 
 // Register strategies
 const momentumStrategy = require('./strategies/momentum');
+const meanReversionStrategy = require('./strategies/meanReversion');
+const newsDrivenStrategy = require('./strategies/newsDriven');
+const stableArbStrategy = require('./strategies/stableArb');
 signalEngine.register(momentumStrategy);
+signalEngine.register(meanReversionStrategy);
+signalEngine.register(newsDrivenStrategy);
+signalEngine.register(stableArbStrategy);
 
 const botState = {
     isRunning: false,

@@ -189,6 +189,24 @@ function resetAll() {
     state.clear();
 }
 
+// TEST-ONLY helper. Seeds the history ring buffer with synthetic prices so
+// strategies can be unit-tested without a live provider. Each price becomes
+// an entry with depthOk=true and timestamps spaced 5 seconds apart.
+function _seedTestHistory(tokenAddress, prices, { depthOk = true, intervalMs = 5000 } = {}) {
+    const s = _init(tokenAddress);
+    s.history = [];
+    const now = Date.now();
+    const startT = now - prices.length * intervalMs;
+    for (let i = 0; i < prices.length; i++) {
+        s.history.push({
+            t: startT + i * intervalMs,
+            price: prices[i],
+            depthOk
+        });
+    }
+    s.lastUpdate = s.history[s.history.length - 1]?.t || now;
+}
+
 module.exports = {
     refreshPrice,
     getHistory,
@@ -200,5 +218,6 @@ module.exports = {
     rollingHigh,
     rollingLow,
     resetAll,
+    _seedTestHistory,
     BUFFER_SIZE
 };

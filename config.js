@@ -69,15 +69,46 @@ module.exports = {
     },
 
     COSTS: {
-        GAS_PER_TX_USD: 0.80,             // realistic BSC swap gas in 2026
-        SWAP_FEE_PCT: 0.25,               // PCS V2 LP fee
-        SLIPPAGE_BUFFER_PCT: 1.0,         // tightened for live mode
+        GAS_PER_TX_USD: 0.35,             // ~4 Gwei × 130k gas × BNB@$600; realistic BSC 2026
+        SWAP_FEE_PCT: 0.25,               // PCS V2 LP fee per leg
+        EXPECTED_SLIPPAGE_PCT: 0.10,      // expected slippage for deep-pool tokens at €25 (used in edge calc)
+        SLIPPAGE_BUFFER_PCT: 1.0,         // max-slippage tolerance for tx (amountOutMin guard)
         LIVE_SLIPPAGE_TOLERANCE_PCT: 1.0  // amountOutMin = quote * (100 - this) / 100
     },
 
     STRATEGIES: {
         MOMENTUM: { enabled: true, weight: 1.0 },
+        MEAN_REVERSION: { enabled: true, weight: 0.9 },
+        NEWS_DRIVEN: { enabled: process.env.ANTHROPIC_API_KEY ? true : false, weight: 1.1 },
+        STABLE_ARB: { enabled: true, weight: 0.8 },
         COPY: { enabled: process.env.COPY_MODE === 'true', weight: 0.6 },
         CROSS_DEX_ARB: { enabled: false, weight: 0.7 } // deferred until bankroll > €300
+    },
+
+    // News-driven LLM strategy config
+    NEWS: {
+        POLL_INTERVAL_MS: 3 * 60 * 1000,           // poll every 3 min
+        MAX_HEADLINES_PER_POLL: 8,                  // top N freshest crypto headlines
+        SIGNAL_TTL_SECONDS: 30 * 60,                // a news signal stays valid 30 min
+        MIN_LLM_CONFIDENCE: 70,                     // 0-100, from Claude analysis
+        MIN_LLM_MAGNITUDE_PCT: 3,                   // need >3% predicted move
+        ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5',
+        MAX_TOKENS_PER_CALL: 200,                   // tight cap — JSON output only
+        ENABLED_AT_LIVE: true                       // disable when STOP_BOT or budget hit
+    },
+
+    // Stablecoin depeg arb config
+    STABLE_ARB: {
+        STABLES: [
+            { symbol: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18 },
+            { symbol: 'USDC', address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18 },
+            { symbol: 'BUSD', address: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', decimals: 18 },
+            { symbol: 'FDUSD', address: '0xc5f0f7b66764F6ec8C8Dff7BA683102295E16409', decimals: 18 },
+            { symbol: 'DAI',  address: '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', decimals: 18 }
+        ],
+        QUOTE_NOTIONAL_USD: 25,                    // size of each arb attempt
+        MIN_NET_EDGE_PCT: 0.20,                    // need 0.2% NET (after fees+gas+slippage)
+        MAX_NOTIONAL_PER_ATTEMPT: 50,              // hard cap per attempt
+        STALE_QUOTE_MS: 4000                        // quote must be < 4s old when executing
     }
 };
