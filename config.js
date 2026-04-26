@@ -108,6 +108,8 @@ module.exports = {
         ],
         QUOTE_NOTIONAL_USD: 25,                    // size of each arb attempt
         MIN_NET_EDGE_PCT: 0.20,                    // need 0.2% NET (after fees+gas+slippage)
+        MIN_DEPEG_PCT: 1.5,                        // min depeg % to trigger signal
+        MAX_DEPEG_PCT: 8.0,                        // above this → likely permanent depeg, skip
         MAX_NOTIONAL_PER_ATTEMPT: 50,              // hard cap per attempt
         STALE_QUOTE_MS: 4000                        // quote must be < 4s old when executing
     }

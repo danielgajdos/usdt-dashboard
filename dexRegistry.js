@@ -15,6 +15,18 @@ const DEXES = {
         router: '0x10ED43C718714eb63d5aA57B78B54704E256024E',
         factory: '0xcA143Ce32Fe78f1f7019d7d551a607b003182036',
         feeBps: 25
+    },
+    BISWAP: {
+        name: 'Biswap',
+        router: '0x3a6d8cA21a1427ef1be3b73c5e6AfCC88E7cA1F9',
+        factory: '0x858E3312ed3A876947EA49d572A7C42DE08af7EE',
+        feeBps: 10   // Biswap 0.10% fee
+    },
+    APESWAP: {
+        name: 'ApeSwap',
+        router: '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b',
+        factory: '0x0841BD0B734E4F5853f0dD8d7Ea041c241fb0Da6',
+        feeBps: 20
     }
 };
 
