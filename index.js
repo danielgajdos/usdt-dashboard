@@ -21,6 +21,7 @@ signalEngine.register(stableArbStrategy);
 
 // Start background services
 const newsLLM = require('./signals/newsLLM');
+const whaleCluster = require('./signals/whaleCluster');
 
 const botState = {
     isRunning: false,
@@ -150,6 +151,11 @@ async function tick(provider, signer) {
     await Promise.all(
         TOKENS.map(t => marketData.refreshPrice(provider, t.address, t.decimals))
     );
+
+    // Whale cluster: poll every ~30s (6 ticks × 5s)
+    if (botState.stats.checks % 6 === 0) {
+        whaleCluster.update(provider).catch(() => {}); // non-blocking, silent on RPC failure
+    }
 
     // 1. Check exits first (prioritize protecting capital over new entries)
     await processExits(signer);

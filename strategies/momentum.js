@@ -2,15 +2,16 @@ const config = require('../config');
 const { TOKENS } = require('../tokens');
 const marketData = require('../marketData');
 const signalEngine = require('../signalEngine');
+const whaleCluster = require('../signals/whaleCluster');
 
 const NAME = 'MOMENTUM';
 
 // Cost estimate for a round-trip (buy + sell).
-// Used to translate raw target move into post-cost expected edge.
+// Uses EXPECTED_SLIPPAGE_PCT for edge calc (not the tx-protection buffer).
 function totalRoundTripCostPct(sizeEur) {
-    const feePct = 2 * config.COSTS.SWAP_FEE_PCT;          // 0.5%
-    const slippagePct = 2 * config.COSTS.SLIPPAGE_BUFFER_PCT; // 2.0%
-    const gasPct = (2 * config.COSTS.GAS_PER_TX_USD / sizeEur) * 100; // depends on size!
+    const feePct = 2 * config.COSTS.SWAP_FEE_PCT;
+    const slippagePct = 2 * (config.COSTS.EXPECTED_SLIPPAGE_PCT || 0.10);
+    const gasPct = (2 * config.COSTS.GAS_PER_TX_USD / sizeEur) * 100;
     return feePct + slippagePct + gasPct;
 }
 
@@ -81,7 +82,16 @@ function evaluateToken(token) {
     if (breakout) probWin += 0.04;
     if (rsiRegime > 0.8) probWin += 0.02;
     if (trendStrength > 0.7) probWin += 0.03;
-    probWin = Math.min(0.58, probWin);
+
+    // Whale co-signal: large wallets accumulating = higher conviction
+    const whaleSig = whaleCluster.getWhaleSignal(token.address);
+    let whaleBoost = 0;
+    if (whaleSig && whaleSig.direction === 'BUY') {
+        whaleBoost = whaleSig.strengthScore * 0.04; // up to +4% probWin
+        probWin += whaleBoost;
+    }
+
+    probWin = Math.min(0.62, probWin);
 
     // Use intended position size (mid of min/max) to estimate cost
     const intendedSize = (config.RISK.MIN_POSITION_EUR + config.RISK.MAX_POSITION_EUR) / 2;
@@ -117,6 +127,8 @@ function evaluateToken(token) {
                 emaFast: ind.emaFast,
                 emaSlow: ind.emaSlow,
                 atr: ind.atr,
+                whaleBoost: whaleBoost.toFixed(3),
+                whalePressureUsd: whaleSig ? whaleSig.netPressureUsd.toFixed(0) : '0',
                 price
             }
         },
