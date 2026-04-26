@@ -19,6 +19,9 @@ signalEngine.register(meanReversionStrategy);
 signalEngine.register(newsDrivenStrategy);
 signalEngine.register(stableArbStrategy);
 
+// Start background services
+const newsLLM = require('./signals/newsLLM');
+
 const botState = {
     isRunning: false,
     mode: config.SIMULATION_MODE ? 'SIMULATION' : 'LIVE',
@@ -62,6 +65,7 @@ async function startBot() {
 
     log(`Starting BSC Momentum Bot (${botState.mode})`, 'info');
     log(`Strategies registered: ${signalEngine.listStrategies().join(', ')}`, 'info');
+    newsLLM.start(msg => log(msg, 'info'));
     log(`Universe: ${TOKENS.map(t => t.symbol).join(', ')}`, 'info');
     log(`Risk: €${config.RISK.MAX_POSITION_EUR} max/pos × ${config.RISK.MAX_CONCURRENT_POSITIONS} pos, SL ${config.EXITS.STOP_LOSS_PCT}% / TP ${config.EXITS.TAKE_PROFIT_PCT}%`, 'info');
 
