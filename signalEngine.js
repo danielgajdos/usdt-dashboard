@@ -1,4 +1,5 @@
 const config = require('./config');
+const timeRegime = require('./signals/timeRegime');
 
 // The Decision shape — every strategy returns this.
 function emptyDecision(overrides = {}) {
@@ -60,7 +61,16 @@ async function scan(ctx) {
         })
     );
 
-    const all = results.flat();
+    // Apply time-of-day regime: scale scores by liquidity multiplier.
+    // Dead zones (04-07 UTC) suppress scores — strategies still evaluate but
+    // need a stronger signal to clear the gate.
+    const regime = timeRegime.getRegime();
+    const all = results.flat().map(d => ({
+        ...d,
+        score: Math.round(d.score * regime.multiplier),
+        signals: { ...d.signals, regime: { name: regime.name, multiplier: regime.multiplier } }
+    }));
+
     return all.sort((a, b) => b.score - a.score);
 }
 
