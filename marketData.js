@@ -1,36 +1,69 @@
+const https = require('https');
 const { ethers } = require('ethers');
 const { quote, sellPath } = require('./dexRegistry');
-const { WBNB, USDT } = require('./tokens');
+const { WBNB, USDT, BY_ADDRESS } = require('./tokens');
 
 // Price history ring buffer per token, plus indicator calculators.
-// Prices are stored as floats (USD per token, quoted via 1-token sell path).
+//
+// Price source strategy (in order of preference):
+//   1. Binance REST API (api.binance.com) — if token has binanceSymbol set.
+//      Binance prices reflect real trading on the CEX and update every tick even
+//      when the BSC PCS V2 pool is quiet (most V2 pools migrated to V3 in 2024+).
+//   2. PancakeSwap V2 on-chain quote — fallback for tokens without a Binance listing.
+//
+// Depth check (is there enough BSC DEX liquidity to actually execute?) runs
+// on-chain every DEPTH_CHECK_INTERVAL ticks — much less often than the price feed
+// to avoid spamming the RPC.
 
 const BUFFER_SIZE = 180;               // 15 min @ 5s
-const QUOTE_NOTIONAL_USD = 25;         // quote using €25 notional so slippage estimate is realistic
+const QUOTE_NOTIONAL_USD = 25;
+const DEPTH_CHECK_INTERVAL = 30;       // re-check on-chain depth every 30 ticks (~150s)
 
-// Map<tokenAddressLower, {history: Array<{t, price, liquidityUsd}>, lastUpdate: number}>
+// Map<tokenAddressLower, {history: [], lastUpdate: 0, lastDepthOk: true, depthCheckCount: 0}>
 const state = new Map();
 
 function _init(address) {
     const key = address.toLowerCase();
     if (!state.has(key)) {
-        state.set(key, { history: [], lastUpdate: 0 });
+        state.set(key, { history: [], lastUpdate: 0, lastDepthOk: true, depthCheckCount: 0 });
     }
     return state.get(key);
 }
 
-// Fetch spot price for `token`: quote 1 full token selling → USDT, return float.
-// Also fetches liquidity proxy: quote for QUOTE_NOTIONAL_USD buy size to detect depth.
-async function refreshPrice(provider, tokenAddress, decimals = 18) {
+// Fetch spot price from Binance REST API. Free, no auth, always up-to-date.
+// Returns float USD price or null on any failure.
+function fetchBinancePrice(binanceSymbol) {
+    return new Promise((resolve) => {
+        const req = https.get(
+            `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(binanceSymbol)}`,
+            { timeout: 3000 },
+            (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(data);
+                        const p = parseFloat(json.price);
+                        resolve(isNaN(p) || p <= 0 ? null : p);
+                    } catch { resolve(null); }
+                });
+            }
+        );
+        req.on('error', () => resolve(null));
+        req.on('timeout', () => { req.destroy(); resolve(null); });
+    });
+}
+
+// Check BSC DEX liquidity depth via on-chain quote.
+// Returns { price, depthOk } or null on failure.
+async function fetchOnChainPrice(provider, tokenAddress, decimals) {
     try {
         const oneUnit = ethers.parseUnits('1', decimals);
         const out = await quote(provider, 'PCS_V2', sellPath(tokenAddress), oneUnit);
         if (out === null || out === 0n) return null;
+        const price = parseFloat(ethers.formatUnits(out, 18));
 
-        const price = parseFloat(ethers.formatUnits(out, 18)); // USDT has 18 decimals on BSC
-
-        // Liquidity proxy: quote a $25 buy → how many tokens? Reverse that to effective price.
-        // If effective price deviates >3% from spot, pool is thin.
+        // Depth: quote a $25 buy; if effective price deviates >3% from spot → thin pool
         const notional = ethers.parseUnits(String(QUOTE_NOTIONAL_USD), 18);
         const buyOut = await quote(provider, 'PCS_V2', [USDT, WBNB, tokenAddress], notional);
         let depthOk = true;
@@ -40,22 +73,55 @@ async function refreshPrice(provider, tokenAddress, decimals = 18) {
             const deviation = Math.abs(effectivePrice - price) / price;
             depthOk = deviation < 0.03;
         }
-
-        const entry = {
-            t: Date.now(),
-            price,
-            depthOk
-        };
-
-        const s = _init(tokenAddress);
-        s.history.push(entry);
-        if (s.history.length > BUFFER_SIZE) s.history.shift();
-        s.lastUpdate = entry.t;
-
-        return entry;
+        return { price, depthOk };
     } catch {
         return null;
     }
+}
+
+// Main price refresh — called every tick from index.js.
+// Uses Binance price (if available) for the ring buffer; checks on-chain depth periodically.
+async function refreshPrice(provider, tokenAddress, decimals = 18) {
+    const key = tokenAddress.toLowerCase();
+    const s = _init(tokenAddress);
+    const token = BY_ADDRESS[key];
+    const binanceSymbol = token ? token.binanceSymbol : null;
+
+    let price = null;
+    let depthOk = s.lastDepthOk; // inherit last known depth until next check
+
+    if (binanceSymbol) {
+        // Primary: Binance CEX price
+        price = await fetchBinancePrice(binanceSymbol);
+        // Periodic on-chain depth check
+        s.depthCheckCount++;
+        if (s.depthCheckCount % DEPTH_CHECK_INTERVAL === 1 || !s.history.length) {
+            const onChain = await fetchOnChainPrice(provider, tokenAddress, decimals);
+            if (onChain !== null) {
+                s.lastDepthOk = onChain.depthOk;
+                depthOk = onChain.depthOk;
+                // If on-chain and Binance differ by >5%, prefer on-chain (likely delisting)
+                if (price && Math.abs(onChain.price - price) / price > 0.05) {
+                    price = onChain.price;
+                }
+            }
+        }
+    } else {
+        // Fallback: on-chain quote (tokens not on Binance)
+        const onChain = await fetchOnChainPrice(provider, tokenAddress, decimals);
+        if (onChain === null) return null;
+        price = onChain.price;
+        depthOk = onChain.depthOk;
+        s.lastDepthOk = depthOk;
+    }
+
+    if (!price || price <= 0) return null;
+
+    const entry = { t: Date.now(), price, depthOk };
+    s.history.push(entry);
+    if (s.history.length > BUFFER_SIZE) s.history.shift();
+    s.lastUpdate = entry.t;
+    return entry;
 }
 
 function getHistory(tokenAddress) {
