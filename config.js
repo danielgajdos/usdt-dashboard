@@ -37,10 +37,15 @@ module.exports = {
 
     // --- THE single unified threshold block ---
     SIGNAL: {
-        MIN_SCORE: 70,                    // 0-100; single gate for execution
-        MIN_EDGE_PCT_AFTER_COSTS: 1.5,    // expected net edge to bother trading at €100 scale
+        MIN_SCORE: 55,                    // 0-100; single gate for execution
+        // At €25 position size, round-trip gas alone is ~2.8%; combined cost ~3.5%.
+        // With probWin=0.62, TP=10%, SL=5%: EV = 6.2-1.9-3.5 = 0.8%.
+        // Setting floor at 0.3% lets genuine signals through while blocking negative-EV.
+        MIN_EDGE_PCT_AFTER_COSTS: 0.3,
         DECISION_TTL_SECONDS: 15,         // stale-decision invalidation
-        TARGET_EDGE_PCT: 5.0              // used in edge_score normalization
+        // Normalize edge scores against achievable range (~0-2%); 5% was unreachable
+        // at €25 position size, causing all edge scores to collapse to <20%.
+        TARGET_EDGE_PCT: 2.0
     },
 
     // --- Risk (aggressive, calibrated for €100 live bankroll) ---

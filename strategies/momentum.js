@@ -69,13 +69,12 @@ function evaluateToken(token) {
         + 0.20 * liquidityScore;
 
     // --- Expected edge (post-cost) ---
-    // Target: 2.5 * ATR up; Stop: 1.2 * ATR down (on price)
-    const targetPct = (2.5 * ind.atr / price) * 100;
-    const stopPct = (1.2 * ind.atr / price) * 100;
-
-    // Cap targets/stops into sensible bounds
-    const cappedTarget = Math.min(targetPct, config.EXITS.TAKE_PROFIT_PCT * 1.5);
-    const cappedStop = Math.min(stopPct, config.EXITS.STOP_LOSS_PCT);
+    // ATR from 5-second bars is tick-level noise (~0.15% on CAKE) — far too small
+    // for a round-trip that costs ~3.5%.  Use the config TP/SL as the trade targets,
+    // because that is exactly what the position manager enforces on live positions.
+    // ATR is still used above for breakout/pullback signal quality and confidence.
+    const cappedTarget = config.EXITS.TAKE_PROFIT_PCT;    // 10%
+    const cappedStop   = config.EXITS.STOP_LOSS_PCT;       // 5%
 
     // Prob-win estimate: base 0.48 + small bonuses
     let probWin = 0.48;

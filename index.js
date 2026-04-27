@@ -163,11 +163,25 @@ async function tick(provider, signer) {
     // 2. Scan for new entries
     await processEntries(provider, signer);
 
-    // Periodic heartbeat
+    // Periodic heartbeat — every minute (~12 ticks × 5s)
     if (botState.stats.checks % 12 === 0) {
         const m = portfolio.getMetrics();
         const open = portfolio.getOpenPositions().length;
-        log(`Heartbeat: ${botState.stats.checks} ticks, ${m.tradesClosed} closed (${(m.winRate * 100).toFixed(0)}% win), ${open} open, PnL €${m.totalPnl.toFixed(2)}`, 'info');
+        log(`Heartbeat: ${botState.stats.checks} ticks | decisionsGen=${botState.stats.decisionsGenerated} exec=${botState.stats.decisionsExecuted} | ${m.tradesClosed} closed (${(m.winRate * 100).toFixed(0)}% win) ${open} open | PnL €${m.totalPnl.toFixed(2)}`, 'info');
+    }
+
+    // Indicator snapshot every 10 min (~120 ticks) — shows why strategies aren't firing
+    if (botState.stats.checks % 120 === 0) {
+        const samples = TOKENS.slice(0, 4); // first 4 tokens as canary
+        for (const t of samples) {
+            const ind = marketData.computeIndicators(t.address);
+            if (!ind) {
+                log(`[Diag] ${t.symbol}: insufficient data (need 65 bars, have ${marketData.getHistory(t.address).length})`, 'info');
+                continue;
+            }
+            const atrPct = ind.atr && ind.price ? (ind.atr / ind.price * 100).toFixed(3) : '?';
+            log(`[Diag] ${t.symbol}: price=${ind.price?.toFixed(4)} RSI=${ind.rsi?.toFixed(1)} EMAf=${ind.emaFast?.toFixed(4)} EMAs=${ind.emaSlow?.toFixed(4)} ATR%=${atrPct} depth=${ind.depthOk} n=${ind.samples}`, 'info');
+        }
     }
 }
 
@@ -231,6 +245,17 @@ async function processEntries(provider, signer) {
 
     botState.stats.decisionsGenerated += decisions.length;
 
+    // Verbose decision log every 60 ticks (~5 min): show top decision even if blocked
+    const verboseTick = botState.stats.checks % 60 === 0;
+    if (verboseTick) {
+        if (decisions.length === 0) {
+            log('[Diag] scan returned 0 decisions (all strategies returned null — check indicator data)', 'info');
+        } else {
+            const top = decisions[0];
+            log(`[Diag] top decision: [${top.strategy}] ${top.symbol} score=${top.score} edge=${top.expectedEdgePct?.toFixed(2)}% conf=${top.confidence?.toFixed(2)} | ${top.reason}`, 'info');
+        }
+    }
+
     if (decisions.length === 0) return;
 
     // Attach sizing and filter through risk manager
@@ -239,8 +264,10 @@ async function processEntries(provider, signer) {
 
         const gate = signalEngine.passesGate(decision, null);
         if (!gate.ok) {
-            if (decision.score >= config.SIGNAL.MIN_SCORE) {
-                log(`[${decision.strategy}] ${decision.symbol} blocked: ${gate.reason}`, 'info');
+            // Log all gate blocks (not just score >= MIN_SCORE) — helps diagnose issues.
+            // But only for top-scoring decisions to avoid log spam on weak signals.
+            if (decision.score >= config.SIGNAL.MIN_SCORE - 15) {
+                log(`[${decision.strategy}] ${decision.symbol} gate block (score=${decision.score}): ${gate.reason}`, 'info');
             }
             continue;
         }
