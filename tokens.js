@@ -17,12 +17,13 @@ const TOKENS = [
         binanceSymbol: 'CAKEUSDT'    // Binance CEX ticker for real-time price feed
     },
     {
-        symbol: 'XVS',
-        address: '0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63',
+        // Trust Wallet Token — BSC-native, high Binance volume, active PCS V2 pool
+        symbol: 'TWT',
+        address: '0x4B0F1812e5Df2A09796481Ff14017e6005508003',
         decimals: 18,
         minLiquidityUsd: 1_000_000,
         allowlisted: true,
-        binanceSymbol: 'XVSUSDT'
+        binanceSymbol: 'TWTUSDT'
     },
     {
         // Radiant Capital — BSC cross-chain lending, active Binance listing, high BSC TVL

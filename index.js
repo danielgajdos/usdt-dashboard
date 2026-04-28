@@ -172,7 +172,7 @@ async function tick(provider, signer) {
 
     // Indicator snapshot every 10 min (~120 ticks) — shows why strategies aren't firing
     if (botState.stats.checks % 120 === 0) {
-        const samples = TOKENS.slice(0, 4); // first 4 tokens as canary
+        const samples = TOKENS; // all tokens as canary
         for (const t of samples) {
             const ind = marketData.computeIndicators(t.address);
             if (!ind) {
