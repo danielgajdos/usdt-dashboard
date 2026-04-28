@@ -68,7 +68,10 @@ module.exports = {
 
     EXITS: {
         STOP_LOSS_PCT: 5,
-        TAKE_PROFIT_PCT: 10,
+        // 13% TP: at probWin=0.57, edge = 0.57*13 - 0.43*5 - 3.96% cost = +1.30% (positive).
+        // At 10% TP: 0.57*10 - 0.43*5 - 3.96 = -0.41% — always negative without whale boost.
+        // BSC mid-cap momentum breakouts regularly extend 10-20% in active sessions.
+        TAKE_PROFIT_PCT: 13,
         TRAIL_ATR_MULTIPLE: 1.5,
         MAX_HOLD_MINUTES: 240
     },

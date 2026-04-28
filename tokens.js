@@ -25,20 +25,22 @@ const TOKENS = [
         binanceSymbol: 'XVSUSDT'
     },
     {
-        symbol: 'BSW',
-        address: '0x965F527D9159dCe6288a2219DB51fc6Eef120dD1',
+        // Radiant Capital — BSC cross-chain lending, active Binance listing, high BSC TVL
+        symbol: 'RDNT',
+        address: '0xf7DE7E8A6bd59ED41a4b5fe50278b3B7f31384dF',
         decimals: 18,
         minLiquidityUsd: 1_000_000,
         allowlisted: true,
-        binanceSymbol: null           // Not listed on Binance; falls back to on-chain quote
+        binanceSymbol: 'RDNTUSDT'
     },
     {
-        symbol: 'ALPACA',
-        address: '0x8F0528cE5eF7B51152A59745bEfDD91D97091d2F',
+        // Lista DAO — PancakeSwap backing protocol, launched 2024, active on Binance
+        symbol: 'LISTA',
+        address: '0xFceB31A79F71AC9CBDCF853519c1b12D379EdC46',
         decimals: 18,
-        minLiquidityUsd: 500_000,
+        minLiquidityUsd: 1_000_000,
         allowlisted: true,
-        binanceSymbol: 'ALPACAUSDT'
+        binanceSymbol: 'LISTAUSDT'
     },
     {
         symbol: 'ANKR',
