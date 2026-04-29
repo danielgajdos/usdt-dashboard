@@ -131,10 +131,31 @@ async function startBot() {
     }, config.TICK_INTERVAL_MS);
 }
 
+// Augment open positions with live price, P/L, hold time, and countdown to timeout.
+// Done here (every tick) so the API/dashboard reads fresh values without re-computing.
+function enrichPositions(pf) {
+    const maxHoldMs = config.EXITS.MAX_HOLD_MINUTES * 60_000;
+    pf.positions = pf.positions.map(p => {
+        const last = marketData.getLastPrice(p.token);
+        const ageMs = Date.now() - new Date(p.timestamp).getTime();
+        const heldMin = Math.floor(ageMs / 60_000);
+        const timeoutMin = Math.max(0, Math.ceil((maxHoldMs - ageMs) / 60_000));
+        let pnlPct = null, pnlEur = null, currentPrice = last || null;
+        if (last && p.entryPrice) {
+            pnlPct = ((last - p.entryPrice) / p.entryPrice) * 100;
+            pnlEur = p.amountEur * (pnlPct / 100);
+        }
+        const slLevel = p.entryPrice ? p.entryPrice * (1 - (p.stopLossPct || config.EXITS.STOP_LOSS_PCT) / 100) : null;
+        const tpLevel = p.entryPrice ? p.entryPrice * (1 + (p.takeProfitPct || config.EXITS.TAKE_PROFIT_PCT) / 100) : null;
+        return { ...p, currentPrice, pnlPct, pnlEur, heldMin, timeoutMin, slLevel, tpLevel };
+    });
+    return pf;
+}
+
 async function tick(provider, signer) {
     botState.stats.checks++;
     botState.stats.lastCheck = new Date().toISOString();
-    botState.portfolio = portfolio.getPortfolio();
+    botState.portfolio = enrichPositions(portfolio.getPortfolio());
 
     // Refresh wallet balances every 5 ticks (~25s)
     if (signer && botState.stats.checks % 5 === 0) {

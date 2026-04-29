@@ -311,21 +311,65 @@
             document.getElementById('metric-roi').className = `text-2xl font-bold ${pf.metrics.totalReturnPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
             document.getElementById('metric-daily').innerText = `${pf.metrics.avgDailyPct.toFixed(2)}% / day`;
 
-            // Positions
+            // Positions — rich card per open position
             const posContainer = document.getElementById('pf-positions');
             if (pf.positions.length > 0) {
-                posContainer.innerHTML = pf.positions.map(p => `
-                    <div class="flex justify-between items-center py-2 border-b border-gray-700 last:border-0 hover:bg-gray-700/50 px-2 rounded">
-                        <div>
-                            <span class="text-blue-300 font-bold">${p.token.slice(0, 6)}...</span>
-                            <span class="text-xs text-gray-500 ml-2">${p.strategy}</span>
+                posContainer.innerHTML = pf.positions.map(p => {
+                    const hasLive = p.currentPrice != null && p.pnlPct != null;
+                    const pnlColor = hasLive ? (p.pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-gray-500';
+                    const pnlSign = hasLive && p.pnlPct >= 0 ? '+' : '';
+                    const dec = (p.entryPrice && p.entryPrice < 0.01) ? 6 : 4;
+                    const fmtPrice = (v) => v != null ? v.toFixed(dec) : '—';
+                    const symbol = p.symbol || (p.token ? p.token.slice(0, 6) + '...' : '?');
+                    const distSL = hasLive && p.slLevel ? ((p.currentPrice - p.slLevel) / p.entryPrice) * 100 : null;
+                    const distTP = hasLive && p.tpLevel ? ((p.tpLevel - p.currentPrice) / p.entryPrice) * 100 : null;
+                    const timeoutColor = p.timeoutMin <= 30 ? 'text-amber-400' : (p.timeoutMin <= 60 ? 'text-yellow-400' : 'text-gray-400');
+                    return `
+                    <div class="py-3 border-b border-gray-700 last:border-0 hover:bg-gray-700/40 px-3 rounded mb-1">
+                        <div class="flex justify-between items-baseline mb-2">
+                            <div class="flex items-baseline gap-3">
+                                <span class="text-blue-300 font-bold text-base">${symbol}</span>
+                                <span class="text-[10px] text-gray-500 uppercase">${p.strategy}</span>
+                                ${p.decisionScore != null ? `<span class="text-[10px] text-gray-600">score ${p.decisionScore}</span>` : ''}
+                            </div>
+                            <div class="text-right">
+                                <div class="${pnlColor} font-bold text-base">${hasLive ? `${pnlSign}${p.pnlPct.toFixed(2)}%` : '—'}</div>
+                                <div class="${pnlColor} text-xs">${hasLive ? `${pnlSign}€${p.pnlEur.toFixed(2)}` : 'no live price'}</div>
+                            </div>
                         </div>
-                         <div class="text-right">
-                            <div class="text-gray-300">$${p.initialInvestment.toFixed(2)}</div>
-                            <div class="text-xs text-gray-500">${new Date(p.timestamp).toLocaleTimeString()}</div>
+                        <div class="grid grid-cols-4 gap-2 text-xs">
+                            <div>
+                                <div class="text-gray-500 text-[10px] uppercase">Entry</div>
+                                <div class="text-gray-300">$${fmtPrice(p.entryPrice)}</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500 text-[10px] uppercase">Current</div>
+                                <div class="text-gray-300">${hasLive ? '$' + fmtPrice(p.currentPrice) : '—'}</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500 text-[10px] uppercase">Size</div>
+                                <div class="text-gray-300">€${(p.amountEur || p.initialInvestment || 0).toFixed(2)}</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500 text-[10px] uppercase">Held</div>
+                                <div class="text-gray-300">${p.heldMin}m</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500 text-[10px] uppercase">Stop Loss</div>
+                                <div class="text-red-400/80">$${fmtPrice(p.slLevel)} <span class="text-gray-500">(${distSL != null ? distSL.toFixed(2) + '%' : '—'} away)</span></div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500 text-[10px] uppercase">Take Profit</div>
+                                <div class="text-emerald-400/80">$${fmtPrice(p.tpLevel)} <span class="text-gray-500">(${distTP != null ? distTP.toFixed(2) + '%' : '—'} away)</span></div>
+                            </div>
+                            <div class="col-span-2">
+                                <div class="text-gray-500 text-[10px] uppercase">Timeout in</div>
+                                <div class="${timeoutColor} font-mono">⏱ ${p.timeoutMin}m</div>
+                            </div>
                         </div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             } else {
                 posContainer.innerHTML = '<span class="text-gray-500 italic">No active positions. Scanning market...</span>';
             }
