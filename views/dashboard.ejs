@@ -311,7 +311,7 @@
             document.getElementById('metric-roi').className = `text-2xl font-bold ${pf.metrics.totalReturnPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
             document.getElementById('metric-daily').innerText = `${pf.metrics.avgDailyPct.toFixed(2)}% / day`;
 
-            // Positions — rich card per open position
+            // Positions — rich card with range chart per open position
             const posContainer = document.getElementById('pf-positions');
             if (pf.positions.length > 0) {
                 posContainer.innerHTML = pf.positions.map(p => {
@@ -321,51 +321,102 @@
                     const dec = (p.entryPrice && p.entryPrice < 0.01) ? 6 : 4;
                     const fmtPrice = (v) => v != null ? v.toFixed(dec) : '—';
                     const symbol = p.symbol || (p.token ? p.token.slice(0, 6) + '...' : '?');
-                    const distSL = hasLive && p.slLevel ? ((p.currentPrice - p.slLevel) / p.entryPrice) * 100 : null;
-                    const distTP = hasLive && p.tpLevel ? ((p.tpLevel - p.currentPrice) / p.entryPrice) * 100 : null;
                     const timeoutColor = p.timeoutMin <= 30 ? 'text-amber-400' : (p.timeoutMin <= 60 ? 'text-yellow-400' : 'text-gray-400');
+
+                    // Chart geometry: position 0% = SL, 100% = TP
+                    const range = (p.tpLevel != null && p.slLevel != null) ? p.tpLevel - p.slLevel : null;
+                    const pct = (v) => range && v != null ? Math.max(0, Math.min(100, ((v - p.slLevel) / range) * 100)) : null;
+                    const entryPct = pct(p.entryPrice);
+                    const currentPct = pct(p.currentPrice);
+                    const hwmPct = pct(p.highWaterMark);
+                    // Show HWM marker only if it's meaningfully above entry (avoids visual noise at HWM ≈ entry)
+                    const showHwm = hasLive && hwmPct != null && entryPct != null && hwmPct > entryPct + 1;
+                    // Out-of-range warning (price hit SL/TP and exit hasn't fired yet — should be very rare)
+                    const outOfRange = hasLive && (p.currentPrice <= p.slLevel || p.currentPrice >= p.tpLevel);
+                    const dotColor = !hasLive ? 'bg-gray-500' : (p.pnlPct >= 0 ? 'bg-emerald-400' : 'bg-red-400');
+                    const dotGlow = !hasLive ? '' : (p.pnlPct >= 0 ? 'shadow-[0_0_14px_rgba(52,211,153,0.85)]' : 'shadow-[0_0_14px_rgba(248,113,113,0.85)]');
+                    const ringColor = !hasLive ? 'ring-gray-500/40' : (p.pnlPct >= 0 ? 'ring-emerald-400/40' : 'ring-red-400/40');
+                    const dangerPulse = hasLive && p.pnlPct < 0 && Math.abs(p.pnlPct) > p.stopLossPct * 0.6 ? 'animate-pulse' : '';
+
                     return `
                     <div class="py-3 border-b border-gray-700 last:border-0 hover:bg-gray-700/40 px-3 rounded mb-1">
+                        <!-- Header: symbol + strategy + score | P/L -->
                         <div class="flex justify-between items-baseline mb-2">
                             <div class="flex items-baseline gap-3">
                                 <span class="text-blue-300 font-bold text-base">${symbol}</span>
-                                <span class="text-[10px] text-gray-500 uppercase">${p.strategy}</span>
+                                <span class="text-[10px] text-gray-500 uppercase tracking-wider">${p.strategy}</span>
                                 ${p.decisionScore != null ? `<span class="text-[10px] text-gray-600">score ${p.decisionScore}</span>` : ''}
                             </div>
                             <div class="text-right">
-                                <div class="${pnlColor} font-bold text-base">${hasLive ? `${pnlSign}${p.pnlPct.toFixed(2)}%` : '—'}</div>
-                                <div class="${pnlColor} text-xs">${hasLive ? `${pnlSign}€${p.pnlEur.toFixed(2)}` : 'no live price'}</div>
+                                <div class="${pnlColor} font-bold text-base tabular-nums">${hasLive ? `${pnlSign}${p.pnlPct.toFixed(2)}%` : '—'}</div>
+                                <div class="${pnlColor} text-xs tabular-nums">${hasLive ? `${pnlSign}€${p.pnlEur.toFixed(2)}` : 'no live price'}</div>
                             </div>
                         </div>
-                        <div class="grid grid-cols-4 gap-2 text-xs">
-                            <div>
-                                <div class="text-gray-500 text-[10px] uppercase">Entry</div>
-                                <div class="text-gray-300">$${fmtPrice(p.entryPrice)}</div>
+
+                        <!-- Range chart: SL ←─────●─────→ TP -->
+                        <div class="relative h-12 mt-3 rounded-lg overflow-hidden bg-gray-900/70 border border-gray-700/60 shadow-inner">
+                            <!-- Three-zone gradient: red-loss / neutral / green-profit, split at entry -->
+                            ${entryPct != null ? `
+                            <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/35 to-red-500/5" style="width: ${entryPct}%"></div>
+                            <div class="absolute inset-y-0 bg-gradient-to-r from-emerald-500/5 to-emerald-500/35" style="left: ${entryPct}%; right: 0"></div>
+                            ` : ''}
+
+                            <!-- Subtle midpoint tick on each side, for visual reference -->
+                            ${entryPct != null ? `
+                            <div class="absolute top-2 bottom-2 w-px bg-gray-500/20" style="left: ${entryPct / 2}%"></div>
+                            <div class="absolute top-2 bottom-2 w-px bg-gray-500/20" style="left: ${entryPct + (100 - entryPct) / 2}%"></div>
+                            ` : ''}
+
+                            <!-- Entry line -->
+                            ${entryPct != null ? `
+                            <div class="absolute top-0 bottom-0 w-px bg-gray-300/80" style="left: ${entryPct}%">
+                                <div class="absolute -top-0.5 -translate-x-1/2 left-0 px-1 text-[9px] font-mono text-gray-300 bg-gray-900/80 rounded whitespace-nowrap">Entry</div>
                             </div>
-                            <div>
-                                <div class="text-gray-500 text-[10px] uppercase">Current</div>
-                                <div class="text-gray-300">${hasLive ? '$' + fmtPrice(p.currentPrice) : '—'}</div>
+                            ` : ''}
+
+                            <!-- HWM line (only if meaningfully > entry) -->
+                            ${showHwm ? `
+                            <div class="absolute top-2 bottom-2 border-l border-dashed border-amber-300/70" style="left: ${hwmPct}%">
+                                <div class="absolute -bottom-0.5 -translate-x-1/2 left-0 px-1 text-[9px] font-mono text-amber-300/90 bg-gray-900/80 rounded whitespace-nowrap">HWM</div>
                             </div>
-                            <div>
-                                <div class="text-gray-500 text-[10px] uppercase">Size</div>
-                                <div class="text-gray-300">€${(p.amountEur || p.initialInvestment || 0).toFixed(2)}</div>
+                            ` : ''}
+
+                            <!-- Current price marker: vertical line + glowing dot -->
+                            ${hasLive && currentPct != null ? `
+                            <div class="absolute top-0 bottom-0 transition-all duration-700 ease-out ${dangerPulse}" style="left: ${currentPct}%; transform: translateX(-50%);">
+                                <div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 ${dotColor} opacity-70"></div>
+                                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full ${dotColor} ${dotGlow} ring-2 ${ringColor} ring-offset-2 ring-offset-gray-900"></div>
                             </div>
-                            <div>
-                                <div class="text-gray-500 text-[10px] uppercase">Held</div>
-                                <div class="text-gray-300">${p.heldMin}m</div>
+                            ` : ''}
+
+                            <!-- Out-of-range warning ribbon -->
+                            ${outOfRange ? `<div class="absolute top-1 right-1 px-1.5 py-0.5 text-[9px] font-mono uppercase rounded bg-red-500/30 text-red-200 border border-red-400/50 animate-pulse">⚠ exit pending</div>` : ''}
+                        </div>
+
+                        <!-- Chart axis labels -->
+                        <div class="flex items-center justify-between text-[10px] font-mono mt-1.5">
+                            <div class="text-red-400/90">
+                                <span class="font-bold">$${fmtPrice(p.slLevel)}</span>
+                                <span class="text-red-400/50 ml-1">SL −${p.stopLossPct}%</span>
                             </div>
-                            <div>
-                                <div class="text-gray-500 text-[10px] uppercase">Stop Loss</div>
-                                <div class="text-red-400/80">$${fmtPrice(p.slLevel)} <span class="text-gray-500">(${distSL != null ? distSL.toFixed(2) + '%' : '—'} away)</span></div>
+                            ${hasLive ? `
+                            <div class="${pnlColor} text-center">
+                                <span class="font-bold tabular-nums">$${fmtPrice(p.currentPrice)}</span>
+                                <span class="text-gray-500 ml-1">now</span>
                             </div>
-                            <div>
-                                <div class="text-gray-500 text-[10px] uppercase">Take Profit</div>
-                                <div class="text-emerald-400/80">$${fmtPrice(p.tpLevel)} <span class="text-gray-500">(${distTP != null ? distTP.toFixed(2) + '%' : '—'} away)</span></div>
+                            ` : '<div></div>'}
+                            <div class="text-emerald-400/90">
+                                <span class="text-emerald-400/50 mr-1">TP +${p.takeProfitPct}%</span>
+                                <span class="font-bold">$${fmtPrice(p.tpLevel)}</span>
                             </div>
-                            <div class="col-span-2">
-                                <div class="text-gray-500 text-[10px] uppercase">Timeout in</div>
-                                <div class="${timeoutColor} font-mono">⏱ ${p.timeoutMin}m</div>
-                            </div>
+                        </div>
+
+                        <!-- Compact stats footer -->
+                        <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-700/50 text-[11px] font-mono">
+                            <span class="text-gray-400">Entry <span class="text-gray-200">$${fmtPrice(p.entryPrice)}</span></span>
+                            <span class="text-gray-400">Size <span class="text-gray-200">€${(p.amountEur || p.initialInvestment || 0).toFixed(2)}</span></span>
+                            <span class="text-gray-400">Held <span class="text-gray-200">${p.heldMin}m</span></span>
+                            <span class="${timeoutColor}">⏱ ${p.timeoutMin}m left</span>
                         </div>
                     </div>
                 `;
