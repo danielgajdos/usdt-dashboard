@@ -26,13 +26,14 @@ const TOKENS = [
         binanceSymbol: 'TWTUSDT'
     },
     {
-        // Radiant Capital — BSC cross-chain lending, active Binance listing, high BSC TVL
-        symbol: 'RDNT',
-        address: '0xf7DE7E8A6bd59ED41a4b5fe50278b3B7f31384dF',
+        // Space ID — BSC-native domain protocol, active 2026 Binance volume
+        // (Replaced RDNT 2026-04-29 — Binance delisted RDNT/USDT ~April 1, klines stale 28+ days)
+        symbol: 'ID',
+        address: '0x2dfF88A56767223A5529eA5960Da7A3F5f766406',
         decimals: 18,
         minLiquidityUsd: 1_000_000,
         allowlisted: true,
-        binanceSymbol: 'RDNTUSDT'
+        binanceSymbol: 'IDUSDT'
     },
     {
         // Lista DAO — PancakeSwap backing protocol, launched 2024, active on Binance

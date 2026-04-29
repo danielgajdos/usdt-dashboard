@@ -166,8 +166,28 @@ async function tick(provider, signer) {
     // Periodic heartbeat — every minute (~12 ticks × 5s)
     if (botState.stats.checks % 12 === 0) {
         const m = portfolio.getMetrics();
-        const open = portfolio.getOpenPositions().length;
-        log(`Heartbeat: ${botState.stats.checks} ticks | decisionsGen=${botState.stats.decisionsGenerated} exec=${botState.stats.decisionsExecuted} | ${m.tradesClosed} closed (${(m.winRate * 100).toFixed(0)}% win) ${open} open | PnL €${m.totalPnl.toFixed(2)}`, 'info');
+        const openPositions = portfolio.getOpenPositions();
+        log(`Heartbeat: ${botState.stats.checks} ticks | decisionsGen=${botState.stats.decisionsGenerated} exec=${botState.stats.decisionsExecuted} | ${m.tradesClosed} closed (${(m.winRate * 100).toFixed(0)}% win) ${openPositions.length} open | PnL €${m.totalPnl.toFixed(2)}`, 'info');
+
+        // Per-position breakdown — entry, current price, unrealized P/L, hold time, dist to SL/TP
+        for (const pos of openPositions) {
+            const last = marketData.getLastPrice(pos.token);
+            const heldMin = Math.floor((Date.now() - new Date(pos.timestamp).getTime()) / 60000);
+            if (!last || !pos.entryPrice) {
+                log(`  └ ${pos.symbol}: entry $${(pos.entryPrice || 0).toFixed(4)} | held ${heldMin}m | (no live price)`, 'info');
+                continue;
+            }
+            const movePct = ((last - pos.entryPrice) / pos.entryPrice) * 100;
+            // Unrealized EUR P/L: investment × movePct − round-trip cost (~3.5%) only realized on exit.
+            // Show gross unrealized; the actual exit cost is applied in closePosition.
+            const unrealizedEur = pos.amountEur * (movePct / 100);
+            const slLevel = pos.entryPrice * (1 - pos.stopLossPct / 100);
+            const tpLevel = pos.entryPrice * (1 + pos.takeProfitPct / 100);
+            const distSl = ((last - slLevel) / pos.entryPrice) * 100;
+            const distTp = ((tpLevel - last) / pos.entryPrice) * 100;
+            const sign = movePct >= 0 ? '+' : '';
+            log(`  └ ${pos.symbol}: entry $${pos.entryPrice.toFixed(4)} → now $${last.toFixed(4)} | P/L ${sign}${movePct.toFixed(2)}% (${sign}€${unrealizedEur.toFixed(2)}) | held ${heldMin}m | SL ${distSl.toFixed(2)}% / TP ${distTp.toFixed(2)}% away`, 'info');
+        }
     }
 
     // Indicator snapshot every 10 min (~120 ticks) — shows why strategies aren't firing

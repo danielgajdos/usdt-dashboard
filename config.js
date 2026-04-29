@@ -59,7 +59,7 @@ module.exports = {
         MIN_CASH_RESERVE_EUR: 20,
         MIN_BNB_GAS_RESERVE: 0.01,        // ~€6 in BNB at $600
         MAX_DAILY_LOSS_PCT: 8,            // circuit breaker
-        COOLDOWN_AFTER_LOSS_SECONDS: 300,
+        COOLDOWN_AFTER_LOSS_SECONDS: 1800,    // 30 min — protect against re-entering same token in chop
         // Phase 3 shadow-live cap: temporarily override MAX_POSITION_EUR to €5 via env.
         SHADOW_LIVE_CAP_EUR: process.env.SHADOW_LIVE_CAP_EUR
             ? parseFloat(process.env.SHADOW_LIVE_CAP_EUR)
