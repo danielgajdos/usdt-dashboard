@@ -137,6 +137,22 @@ const portfolio = {
         }
     },
 
+    // Drop a position record that no longer has on-chain backing.
+    // Happens when a same-tick duplicate-buy bug created two records and the
+    // first exit sold all tokens (the second record is now phantom). We remove
+    // it without writing history (the realised PnL was already booked against
+    // the sibling position) and fix investedBalance. cashBalance stays — the
+    // wallet sync will reconcile any drift on the next tick.
+    removeOrphan: (tokenAddress) => {
+        const idx = state.positions.findIndex(p => p.token.toLowerCase() === tokenAddress.toLowerCase());
+        if (idx === -1) return { success: false, reason: 'not found' };
+        const pos = state.positions[idx];
+        state.investedBalance -= pos.initialInvestment;
+        state.positions.splice(idx, 1);
+        storage.saveState(state);
+        return { success: true, removed: pos };
+    },
+
     // Close position using the REAL exit value from executed sell.
     closePosition: (tokenAddress, exitValueEur, exitTxHash, reason = '') => {
         const idx = state.positions.findIndex(p => p.token.toLowerCase() === tokenAddress.toLowerCase());

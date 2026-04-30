@@ -167,6 +167,8 @@
                             <th class="p-2">Exit Time</th>
                             <th class="p-2">Strategy</th>
                             <th class="p-2">Token</th>
+                            <th class="p-2">Entry Price</th>
+                            <th class="p-2">Exit Price</th>
                             <th class="p-2">Invested</th>
                             <th class="p-2">Exit Value</th>
                             <th class="p-2">PnL</th>
@@ -175,7 +177,7 @@
                     </thead>
                     <tbody id="trade-history" class="font-mono text-gray-300">
                         <tr>
-                            <td colspan="6" class="p-4 text-center text-gray-500 italic">No trade history yet.</td>
+                            <td colspan="9" class="p-4 text-center text-gray-500 italic">No trade history yet.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -428,23 +430,29 @@
             // Trade History
             const historyContainer = document.getElementById('trade-history');
             if (pf.history.length > 0) {
-                historyContainer.innerHTML = pf.history.map(h => `
+                historyContainer.innerHTML = pf.history.map(h => {
+                    const symbol = h.symbol || (h.token ? h.token.slice(0, 6) + '…' : '?');
+                    const dec = (h.entryPrice && h.entryPrice < 0.01) ? 6 : 4;
+                    const fmtP = (v) => (v != null && !isNaN(v)) ? '$' + v.toFixed(dec) : '—';
+                    return `
                     <tr class="border-b border-gray-700/50 hover:bg-gray-700/30 transition">
                         <td class="p-2 text-gray-400">${new Date(h.exitTime).toLocaleTimeString()}</td>
                         <td class="p-2 text-xs font-bold text-gray-500 uppercase">${h.strategy || 'Unknown'}</td>
-                        <td class="p-2 text-blue-300">${h.token.slice(0, 6)}...</td>
-                        <td class="p-2">$${h.investment ? h.investment.toFixed(2) : '-'}</td>
-                        <td class="p-2">$${h.exitValue ? h.exitValue.toFixed(2) : '-'}</td>
-                        <td class="p-2 ${h.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold">
+                        <td class="p-2 text-blue-300 font-bold">${symbol}</td>
+                        <td class="p-2 text-gray-300 tabular-nums">${fmtP(h.entryPrice)}</td>
+                        <td class="p-2 text-gray-300 tabular-nums">${fmtP(h.exitPrice)}</td>
+                        <td class="p-2 tabular-nums">$${h.investment ? h.investment.toFixed(2) : '-'}</td>
+                        <td class="p-2 tabular-nums">$${h.exitValue ? h.exitValue.toFixed(2) : '-'}</td>
+                        <td class="p-2 ${h.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold tabular-nums">
                             ${h.pnl >= 0 ? '+' : ''}$${h.pnl.toFixed(2)}
                         </td>
-                         <td class="p-2">
+                        <td class="p-2">
                             <span class="px-2 py-0.5 rounded text-xs ${h.pnl >= 0 ? 'bg-emerald-900 text-emerald-200' : 'bg-red-900 text-red-200'}">
                                 ${h.result}
                             </span>
                         </td>
                     </tr>
-                `).join('');
+                `;}).join('');
             }
 
             // Chart Update

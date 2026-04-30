@@ -184,6 +184,12 @@ async function tick(provider, signer) {
     // 2. Scan for new entries
     await processEntries(provider, signer);
 
+    // Equity snapshot every 60 ticks (~5 min) for the dashboard chart.
+    // Cap at 1000 entries (~3.5 days at 5-min cadence) is enforced inside takeSnapshot.
+    if (botState.stats.checks % 60 === 0) {
+        portfolio.takeSnapshot();
+    }
+
     // Periodic heartbeat — every minute (~12 ticks × 5s)
     if (botState.stats.checks % 12 === 0) {
         const m = portfolio.getMetrics();
@@ -254,6 +260,16 @@ async function processExits(signer) {
         const result = await execution.executeDecision(signer, decision);
 
         if (!result.success) {
+            // "No balance to sell" = orphan record (e.g. duplicate-buy that got sold by a sibling
+            // exit on the prior tick). The on-chain tokens are already gone, so retrying forever
+            // just spams logs. Close the orphan with the recorded investment as exit value so
+            // the bookkeeping stays neutral, then move on.
+            if (/no balance/i.test(result.error || '')) {
+                log(`Orphan ${pos.symbol}: on-chain balance is 0 — clearing stale position record (no PnL — sibling already booked it)`, 'warning');
+                portfolio.removeOrphan(pos.token);
+                portfolio.takeSnapshot();
+                continue;
+            }
             log(`Exit failed for ${pos.symbol}: ${result.error}`, 'error');
             continue;
         }
@@ -269,6 +285,7 @@ async function processExits(signer) {
                 const pnlColor = closed.pnl > 0 ? 'success' : 'error';
                 log(`Closed ${pos.symbol}: PnL €${closed.pnl.toFixed(2)} (${closed.pnlPercent.toFixed(2)}%) — ${check.reason}`, pnlColor);
                 if (closed.pnl <= 0) riskManager.recordLoss(pos.token);
+                portfolio.takeSnapshot(); // capture the inflection point on the equity curve
             }
         }
     }
@@ -299,9 +316,13 @@ async function processEntries(provider, signer) {
 
     if (decisions.length === 0) return;
 
-    // Attach sizing and filter through risk manager
+    // Attach sizing and filter through risk manager.
+    // `livePort` is re-read after each successful entry so subsequent decisions
+    // see the freshly-opened positions — prevents two strategies from buying the
+    // same token in one tick (which orphans the second record on exit).
+    let livePort = port;
     for (const decision of decisions) {
-        decision.sizeEur = riskManager.sizePosition(decision.score, port.cashBalance);
+        decision.sizeEur = riskManager.sizePosition(decision.score, livePort.cashBalance);
 
         const gate = signalEngine.passesGate(decision, null);
         if (!gate.ok) {
@@ -313,7 +334,7 @@ async function processEntries(provider, signer) {
             continue;
         }
 
-        const canOpen = riskManager.canOpen(decision, port, bnbBalance);
+        const canOpen = riskManager.canOpen(decision, livePort, bnbBalance);
         if (!canOpen.ok) {
             log(`[${decision.strategy}] ${decision.symbol} risk block: ${canOpen.reason}`, 'info');
             continue;
@@ -349,6 +370,11 @@ async function processEntries(provider, signer) {
             takeProfitPct: decision.takeProfitPct,
             decisionScore: decision.score
         });
+
+        // Refresh portfolio snapshot so the next decision sees this entry —
+        // critical to prevent same-tick double-buys of the same token.
+        livePort = portfolio.getPortfolio();
+        portfolio.takeSnapshot(); // capture the entry on the equity curve
 
         log(`✅ Opened ${decision.symbol}: ${result.amountTokens?.toFixed(4) || '?'} tokens @ ${result.entryPrice?.toFixed(6) || '?'} | tx: ${result.txHash}`, 'success');
 
