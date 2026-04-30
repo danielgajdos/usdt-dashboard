@@ -119,14 +119,22 @@ async function startBot() {
     const initialEquity = portfolio.getPortfolio().totalValue;
     riskManager.rollDay(initialEquity);
 
-    // Main tick — runs every TICK_INTERVAL_MS
+    // Main tick — runs every TICK_INTERVAL_MS.
+    // A tick-in-flight guard prevents overlapping invocations: when an entry is
+    // executing an on-chain swap (awaitable receipt takes 3-10s), the next 5s
+    // interval would fire concurrently and the still-pending position wouldn't
+    // be in portfolio.positions yet — letting strategies double-buy the same
+    // token (this caused the 2026-04-29 CAKE duplicate that orphaned a position).
+    let tickInFlight = false;
     setInterval(async () => {
-        if (!botState.isRunning) return;
-
+        if (!botState.isRunning || tickInFlight) return;
+        tickInFlight = true;
         try {
             await tick(provider, signer);
         } catch (err) {
             log(`Tick error: ${err.message}`, 'error');
+        } finally {
+            tickInFlight = false;
         }
     }, config.TICK_INTERVAL_MS);
 }
