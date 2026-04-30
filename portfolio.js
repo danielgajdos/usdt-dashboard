@@ -34,7 +34,10 @@ const portfolio = {
         const totalReturnPct = state.startEquity > 0
             ? ((currentEquity - state.startEquity) / state.startEquity) * 100
             : 0;
-        const daysActive = Math.max(0.001, (new Date() - new Date(state.startTime)) / (1000 * 60 * 60 * 24));
+        // Floor daysActive at 1 day to avoid runaway "% / day" readings right after
+        // boot or a startTime reset. Gives a stable, honest reading.
+        const rawDays = (new Date() - new Date(state.startTime)) / (1000 * 60 * 60 * 24);
+        const daysActive = Math.max(1, rawDays);
         const avgDailyPct = totalReturnPct / daysActive;
 
         return {
@@ -50,21 +53,29 @@ const portfolio = {
         };
     },
 
+    // Called once on boot from the on-chain USDT balance. Only initialises
+    // startEquity/startTime on first ever run — re-anchoring on every reboot
+    // makes ROI useless. Always cash-syncs.
     setCashBalance: (amount) => {
         state.cashBalance = parseFloat(amount);
-        state.startEquity = state.cashBalance + state.investedBalance;
-        state.totalValue = state.startEquity;
-        state.startTime = new Date().toISOString();
+        if (!state.startEquity || state.startEquity <= 0) {
+            state.startEquity = state.cashBalance + state.investedBalance;
+            state.startTime = new Date().toISOString();
+        }
+        state.totalValue = state.cashBalance + state.investedBalance;
         portfolio.takeSnapshot();
         storage.saveState(state);
     },
 
+    // Periodic on-chain wallet sync. Only updates cashBalance — does NOT
+    // mutate startEquity. Bookkeeping drift between in-memory and on-chain
+    // is real (gas/slippage rounding, orphan races) but it should land on
+    // PnL, not be hidden by silently sliding the ROI baseline.
     syncBalance: (newBalance) => {
         const diff = newBalance - state.cashBalance;
         if (Math.abs(diff) > 1.0) {
-            console.log(`[Portfolio] External balance change detected: ${diff > 0 ? '+' : ''}$${diff.toFixed(2)}`);
+            console.log(`[Portfolio] On-chain balance reconciled: ${diff > 0 ? '+' : ''}$${diff.toFixed(2)} → ${newBalance.toFixed(2)} (PnL absorbs the difference)`);
             state.cashBalance = newBalance;
-            state.startEquity += diff;
             state.totalValue = state.cashBalance + state.investedBalance;
             storage.saveState(state);
         }
