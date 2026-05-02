@@ -37,15 +37,13 @@ module.exports = {
 
     // --- THE single unified threshold block ---
     SIGNAL: {
-        MIN_SCORE: 55,                    // 0-100; single gate for execution
-        // At €25 position size, round-trip gas alone is ~2.8%; combined cost ~3.5%.
-        // With probWin=0.62, TP=10%, SL=5%: EV = 6.2-1.9-3.5 = 0.8%.
-        // Setting floor at 0.3% lets genuine signals through while blocking negative-EV.
-        MIN_EDGE_PCT_AFTER_COSTS: 0.3,
+        MIN_SCORE: 45,                    // 0-100; lowered from 55 to match tighter-target score range
+        // At €25 with TP=4%, SL=2.5%, ~2.3% friction, breakeven probWin ≈ 0.74.
+        // Realized losses are mitigated by early-exit logic in riskManager.shouldExit
+        // (momentum-death and overheated-RSI exits cap losses well below SL_PCT).
+        MIN_EDGE_PCT_AFTER_COSTS: 0.0,    // edge can be marginal — early exits do the work
         DECISION_TTL_SECONDS: 15,         // stale-decision invalidation
-        // Normalize edge scores against achievable range (~0-2%); 5% was unreachable
-        // at €25 position size, causing all edge scores to collapse to <20%.
-        TARGET_EDGE_PCT: 2.0
+        TARGET_EDGE_PCT: 1.0              // achievable target after the TP cut
     },
 
     // --- Risk (aggressive, calibrated for €100 live bankroll) ---
@@ -67,17 +65,25 @@ module.exports = {
     },
 
     EXITS: {
-        STOP_LOSS_PCT: 5,
-        // 13% TP: at probWin=0.57, edge = 0.57*13 - 0.43*5 - 3.96% cost = +1.30% (positive).
-        // At 10% TP: 0.57*10 - 0.43*5 - 3.96 = -0.41% — always negative without whale boost.
-        // BSC mid-cap momentum breakouts regularly extend 10-20% in active sessions.
-        TAKE_PROFIT_PCT: 13,
-        TRAIL_ATR_MULTIPLE: 1.5,
-        MAX_HOLD_MINUTES: 240
+        // Recalibrated for actual BSC mid-cap volatility (ATR ≈ 0.01-0.05%/min).
+        // Old 13% TP was unreachable inside MAX_HOLD; ALL 12 trades since
+        // 2026-04-29 timed out at 240min with -2 to -3% drift losses.
+        // New TP=4% is reachable in 30-60min during active sessions; SL=2.5%
+        // covers round-trip cost (~2.3%) with small margin.
+        STOP_LOSS_PCT: 2.5,
+        TAKE_PROFIT_PCT: 4.0,
+        TRAIL_ATR_MULTIPLE: 1.0,          // tighter trail after TP1
+        MAX_HOLD_MINUTES: 60,             // faster cycling: 4h → 1h
+        // Early-exit thresholds (used by riskManager.shouldExit alongside SL/TP/timeout)
+        MOMENTUM_DEATH_MIN_AGE_MIN: 5,    // grace period after entry before checking EMA reversion
+        OVERHEATED_RSI: 75,               // exit profitable position when RSI tags this
+        STUCK_LOSS_AGE_MIN: 15            // exit losing positions early if signal dead
     },
 
     COSTS: {
-        GAS_PER_TX_USD: 0.35,             // ~4 Gwei × 130k gas × BNB@$600; realistic BSC 2026
+        // BSC mainnet gas in 2026: ~3-4 gwei × ~130k gas × BNB@$600 ≈ $0.18-$0.24.
+        // Old $0.35 estimate inflated cost model and made every probWin look hopeless.
+        GAS_PER_TX_USD: 0.20,
         SWAP_FEE_PCT: 0.25,               // PCS V2 LP fee per leg
         EXPECTED_SLIPPAGE_PCT: 0.10,      // expected slippage for deep-pool tokens at €25 (used in edge calc)
         SLIPPAGE_BUFFER_PCT: 1.0,         // max-slippage tolerance for tx (amountOutMin guard)

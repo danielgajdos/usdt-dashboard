@@ -143,24 +143,56 @@ function canOpen(decision, portfolio, bnbBalance) {
 }
 
 // Check if a position should be exited. Returns {shouldExit, reason} or {shouldExit: false}.
-function shouldExit(position, currentPrice, currentAtr) {
+// `indicators` is the full computeIndicators() output (price, emaFast, emaSlow, rsi, atr, ...);
+// passing the full object lets us add momentum-death and overheated-RSI exits.
+function shouldExit(position, currentPrice, indicators) {
     if (!position || !position.entryPrice) return { shouldExit: false };
     if (!currentPrice || currentPrice <= 0) return { shouldExit: false };
 
     const pnlPct = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
     const ageMin = (Date.now() - new Date(position.timestamp).getTime()) / 60000;
+    const currentAtr = indicators ? indicators.atr : null;
 
-    // Stop-loss
+    // 1. Stop-loss — hard guard, fires regardless of indicators
     if (pnlPct <= -config.EXITS.STOP_LOSS_PCT) {
         return { shouldExit: true, reason: `SL hit (${pnlPct.toFixed(2)}%)` };
     }
 
-    // Take-profit (first touch)
-    if (!position.tookTP1 && pnlPct >= config.EXITS.TAKE_PROFIT_PCT) {
-        return { shouldExit: true, reason: `TP hit (${pnlPct.toFixed(2)}%)`, partial: 0.5 };
+    // 2. Take-profit — full close (no partial; at 4% TP the gross profit barely covers
+    // round-trip costs, so leaving 50% on a trailing stop usually loses the win).
+    if (pnlPct >= config.EXITS.TAKE_PROFIT_PCT) {
+        return { shouldExit: true, reason: `TP hit (${pnlPct.toFixed(2)}%)` };
     }
 
-    // Trailing stop after TP1
+    // 3. Overheated-RSI exit — if profitable AND RSI tags overbought, take the win
+    // before mean reversion eats it.  Specific to MOMENTUM/breakout entries that
+    // tend to fade from RSI>75.
+    if (indicators && indicators.rsi != null
+        && pnlPct > 0.5
+        && indicators.rsi >= config.EXITS.OVERHEATED_RSI) {
+        return { shouldExit: true, reason: `overheated (RSI ${indicators.rsi.toFixed(0)}, ${pnlPct.toFixed(2)}%)` };
+    }
+
+    // 4. Momentum-death exit — entry signal was "EMA fast > EMA slow + slope up".
+    // If the EMA crossover has reversed, the thesis is dead.  Grace period
+    // prevents whipsaw exits on noise right after entry.
+    if (indicators && indicators.emaFast != null && indicators.emaSlow != null
+        && ageMin >= config.EXITS.MOMENTUM_DEATH_MIN_AGE_MIN
+        && indicators.emaFast < indicators.emaSlow) {
+        return { shouldExit: true, reason: `momentum dead (EMA cross-down, ${pnlPct.toFixed(2)}%)` };
+    }
+
+    // 5. Stuck-loss exit — if a position is older than STUCK_LOSS_AGE_MIN and still
+    // negative with no positive momentum, cut it instead of waiting for time stop.
+    // Saves ~1-2% on each "drift to nowhere" trade vs the old 240-min timeout.
+    if (indicators && indicators.emaFastSlope != null
+        && ageMin >= config.EXITS.STUCK_LOSS_AGE_MIN
+        && pnlPct < -0.3
+        && indicators.emaFastSlope <= 0) {
+        return { shouldExit: true, reason: `stuck losing (${pnlPct.toFixed(2)}% @ ${ageMin.toFixed(0)}min, no upside)` };
+    }
+
+    // 6. Trailing stop — only kicks in if a previous partial-exit set tookTP1 (legacy)
     if (position.tookTP1 && position.highWaterMark && currentAtr) {
         const trail = position.highWaterMark - config.EXITS.TRAIL_ATR_MULTIPLE * currentAtr;
         if (currentPrice < trail) {
@@ -168,9 +200,9 @@ function shouldExit(position, currentPrice, currentAtr) {
         }
     }
 
-    // Time stop
+    // 7. Time stop — final fallback
     if (ageMin >= config.EXITS.MAX_HOLD_MINUTES) {
-        return { shouldExit: true, reason: `time stop (${ageMin.toFixed(0)}min)` };
+        return { shouldExit: true, reason: `time stop (${ageMin.toFixed(0)}min, ${pnlPct.toFixed(2)}%)` };
     }
 
     return { shouldExit: false };

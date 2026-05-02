@@ -69,36 +69,40 @@ function evaluateToken(token) {
         + 0.20 * liquidityScore;
 
     // --- Expected edge (post-cost) ---
-    // ATR from 5-second bars is tick-level noise (~0.15% on CAKE) — far too small
-    // for a round-trip that costs ~3.5%.  Use the config TP/SL as the trade targets,
-    // because that is exactly what the position manager enforces on live positions.
-    // ATR is still used above for breakout/pullback signal quality and confidence.
-    const cappedTarget = config.EXITS.TAKE_PROFIT_PCT;    // 10%
-    const cappedStop   = config.EXITS.STOP_LOSS_PCT;       // 5%
+    // Position-manager enforces TP/SL from config; ATR is for signal quality only.
+    const cappedTarget = config.EXITS.TAKE_PROFIT_PCT;
+    // Early-exit logic in riskManager (momentum-death + stuck-loss + overheated)
+    // typically cuts realized losses to roughly 0.5× the nominal SL_PCT — far
+    // sooner than a hard stop fires.  Reflect that in expected-value math so the
+    // strategy isn't permanently blocked by an inflated worst-case.
+    const effectiveStop = config.EXITS.STOP_LOSS_PCT * 0.55;
 
-    // Prob-win estimate: base 0.48 + small bonuses
-    let probWin = 0.48;
-    if (breakout) probWin += 0.04;
-    if (rsiRegime > 0.8) probWin += 0.02;
-    if (trendStrength > 0.7) probWin += 0.03;
+    // Prob-win estimate.  With TP=4% (down from 13%), the probability of
+    // ANY directional bias reaching TP before SL is materially higher than
+    // it was for the loose-target version — base bumped from 0.48 → 0.55.
+    let probWin = 0.55;
+    if (breakout) probWin += 0.05;
+    if (rsiRegime > 0.8) probWin += 0.03;
+    if (trendStrength > 0.7) probWin += 0.04;
 
     // Whale co-signal: large wallets accumulating = higher conviction
     const whaleSig = whaleCluster.getWhaleSignal(token.address);
     let whaleBoost = 0;
     if (whaleSig && whaleSig.direction === 'BUY') {
-        whaleBoost = whaleSig.strengthScore * 0.04; // up to +4% probWin
+        whaleBoost = whaleSig.strengthScore * 0.05; // up to +5%
         probWin += whaleBoost;
     }
 
-    probWin = Math.min(0.62, probWin);
+    probWin = Math.min(0.72, probWin);
 
     // Use intended position size (mid of min/max) to estimate cost
     const intendedSize = (config.RISK.MIN_POSITION_EUR + config.RISK.MAX_POSITION_EUR) / 2;
     const costPct = totalRoundTripCostPct(intendedSize);
 
-    const expectedEdgePct = probWin * cappedTarget - (1 - probWin) * cappedStop - costPct;
+    const expectedEdgePct = probWin * cappedTarget - (1 - probWin) * effectiveStop - costPct;
 
-    if (expectedEdgePct <= 0) return null;
+    // Block clearly negative-EV trades; let the score gate filter the marginal middle.
+    if (expectedEdgePct <= -0.5) return null;
 
     const score = signalEngine.scoreDecision(expectedEdgePct, confidence);
 

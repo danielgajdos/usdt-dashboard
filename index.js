@@ -251,7 +251,7 @@ async function processExits(signer) {
 
         portfolio.updateHighWaterMark(pos.token, currentPrice);
 
-        const check = riskManager.shouldExit(pos, currentPrice, indicators ? indicators.atr : null);
+        const check = riskManager.shouldExit(pos, currentPrice, indicators);
         if (!check.shouldExit) continue;
 
         log(`EXIT ${pos.symbol || pos.token.slice(0, 8)}: ${check.reason}`, check.reason.startsWith('SL') ? 'error' : 'success');

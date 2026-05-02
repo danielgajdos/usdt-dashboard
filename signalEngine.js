@@ -23,9 +23,13 @@ function emptyDecision(overrides = {}) {
 }
 
 function scoreDecision(edgePct, confidence) {
+    // Confidence-weighted: with tighter targets (TP=4%, SL=2.5%), expected
+    // edges are smaller in absolute terms — confidence (signal quality) is
+    // a better discriminator than raw edge magnitude.  Old 60/40 split made
+    // every signal collapse to score < 50.
     const edgeScore = Math.max(0, Math.min(1, edgePct / config.SIGNAL.TARGET_EDGE_PCT));
     const confScore = Math.max(0, Math.min(1, confidence));
-    return Math.round(100 * (0.6 * edgeScore + 0.4 * confScore));
+    return Math.round(100 * (0.4 * edgeScore + 0.6 * confScore));
 }
 
 // Registered strategies. Each must export: name, evaluate(ctx) → Decision[]
