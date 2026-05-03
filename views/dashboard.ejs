@@ -438,9 +438,11 @@
                     <tr class="border-b border-gray-700/50 hover:bg-gray-700/30 transition">
                         <td class="p-2 text-gray-400 whitespace-nowrap">${(() => {
                             const d = new Date(h.exitTime);
-                            const date = d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
-                            const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-                            return `<span class="text-gray-500">${date}</span> <span>${time}</span>`;
+                            const dd = String(d.getDate()).padStart(2, '0');
+                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                            const hh = String(d.getHours()).padStart(2, '0');
+                            const min = String(d.getMinutes()).padStart(2, '0');
+                            return `<span class="text-gray-500">${dd}.${mm}.</span> <span>${hh}:${min}</span>`;
                         })()}</td>
                         <td class="p-2 text-xs font-bold text-gray-500 uppercase">${h.strategy || 'Unknown'}</td>
                         <td class="p-2 text-blue-300 font-bold">${symbol}</td>
