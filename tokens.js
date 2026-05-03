@@ -7,6 +7,12 @@ const WBNB = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
 const USDT = '0x55d398326f99059fF775485246999027B3197955';
 const BUSD = '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56';
 
+// 2026-05-03: Universe pivoted from BSC mid-caps to Binance-Peg majors.
+// Mid-caps (TWT/ID/LISTA/ANKR) were too flat at 1-min granularity (ATR 0.01-0.04%/min)
+// to ever hit a meaningful TP, and 3 of 5 had depth=false on PCS V2 anyway.
+// Wrapped majors trade in deep PCS V2 pools, mirror their CEX prices via arb,
+// and actually move 0.05-0.15% per minute — momentum has something to grab.
+// CAKE retained as the one BSC-native datapoint with a working V2 pool.
 const TOKENS = [
     {
         symbol: 'CAKE',
@@ -14,43 +20,34 @@ const TOKENS = [
         decimals: 18,
         minLiquidityUsd: 5_000_000,
         allowlisted: true,
-        binanceSymbol: 'CAKEUSDT'    // Binance CEX ticker for real-time price feed
+        binanceSymbol: 'CAKEUSDT'
     },
     {
-        // Trust Wallet Token — BSC-native, high Binance volume, active PCS V2 pool
-        symbol: 'TWT',
-        address: '0x4B0F1812e5Df2A09796481Ff14017e6005508003',
+        // Binance-Peg Ethereum Token — deep ETH/USDT V2 pool, mirrors ETHUSDT
+        symbol: 'ETH',
+        address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8',
         decimals: 18,
-        minLiquidityUsd: 1_000_000,
+        minLiquidityUsd: 10_000_000,
         allowlisted: true,
-        binanceSymbol: 'TWTUSDT'
+        binanceSymbol: 'ETHUSDT'
     },
     {
-        // Space ID — BSC-native domain protocol, active 2026 Binance volume
-        // (Replaced RDNT 2026-04-29 — Binance delisted RDNT/USDT ~April 1, klines stale 28+ days)
-        symbol: 'ID',
-        address: '0x2dfF88A56767223A5529eA5960Da7A3F5f766406',
+        // Binance-Peg BTC Token (BTCB) — the canonical wrapped BTC on BSC
+        symbol: 'BTCB',
+        address: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c',
         decimals: 18,
-        minLiquidityUsd: 1_000_000,
+        minLiquidityUsd: 10_000_000,
         allowlisted: true,
-        binanceSymbol: 'IDUSDT'
+        binanceSymbol: 'BTCUSDT'
     },
     {
-        // Lista DAO — PancakeSwap backing protocol, launched 2024, active on Binance
-        symbol: 'LISTA',
-        address: '0xFceB31A79F71AC9CBDCF853519c1b12D379EdC46',
+        // Binance-Peg Solana — wrapped SOL on BSC
+        symbol: 'SOL',
+        address: '0x570A5D26f7765Ecb712C0924E4De545B89fD43dF',
         decimals: 18,
-        minLiquidityUsd: 1_000_000,
+        minLiquidityUsd: 5_000_000,
         allowlisted: true,
-        binanceSymbol: 'LISTAUSDT'
-    },
-    {
-        symbol: 'ANKR',
-        address: '0xf307910A4c7bbc79691fD374889b36d8531B08e3',
-        decimals: 18,
-        minLiquidityUsd: 500_000,
-        allowlisted: true,
-        binanceSymbol: 'ANKRUSDT'
+        binanceSymbol: 'SOLUSDT'
     }
 ];
 

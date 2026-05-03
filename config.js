@@ -37,7 +37,7 @@ module.exports = {
 
     // --- THE single unified threshold block ---
     SIGNAL: {
-        MIN_SCORE: 45,                    // 0-100; lowered from 55 to match tighter-target score range
+        MIN_SCORE: 38,                    // 0-100; let early-exit logic prove its worth on real signals
         // At €25 with TP=4%, SL=2.5%, ~2.3% friction, breakeven probWin ≈ 0.74.
         // Realized losses are mitigated by early-exit logic in riskManager.shouldExit
         // (momentum-death and overheated-RSI exits cap losses well below SL_PCT).
