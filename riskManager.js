@@ -173,13 +173,25 @@ function shouldExit(position, currentPrice, indicators) {
         return { shouldExit: true, reason: `overheated (RSI ${indicators.rsi.toFixed(0)}, ${pnlPct.toFixed(2)}%)` };
     }
 
-    // 4. Momentum-death exit — entry signal was "EMA fast > EMA slow + slope up".
-    // If the EMA crossover has reversed, the thesis is dead.  Grace period
-    // prevents whipsaw exits on noise right after entry.
-    if (indicators && indicators.emaFast != null && indicators.emaSlow != null
+    // 4. Momentum-death exit — only for MOMENTUM entries (mean-reversion trades
+    // ENTER with EMAfast < EMAslow by design, so this exit would fire instantly
+    // on every MR position).  Strategy-specific gating prevents that.
+    if (position.strategy === 'MOMENTUM'
+        && indicators && indicators.emaFast != null && indicators.emaSlow != null
         && ageMin >= config.EXITS.MOMENTUM_DEATH_MIN_AGE_MIN
         && indicators.emaFast < indicators.emaSlow) {
         return { shouldExit: true, reason: `momentum dead (EMA cross-down, ${pnlPct.toFixed(2)}%)` };
+    }
+
+    // 4b. Mean-reversion-failure exit — for MEAN_REVERSION entries the thesis is
+    // "price will bounce back to EMA_slow".  If after the grace period RSI keeps
+    // falling AND price keeps moving away from EMA_slow, the bounce isn't coming.
+    if (position.strategy === 'MEAN_REVERSION'
+        && indicators && indicators.rsi != null && indicators.emaSlow != null
+        && ageMin >= config.EXITS.MOMENTUM_DEATH_MIN_AGE_MIN
+        && indicators.rsi < 25
+        && currentPrice < indicators.emaSlow * 0.99) {
+        return { shouldExit: true, reason: `reversion failed (RSI ${indicators.rsi.toFixed(0)}, still below mean, ${pnlPct.toFixed(2)}%)` };
     }
 
     // 5. Stuck-loss exit — if a position is older than STUCK_LOSS_AGE_MIN and still

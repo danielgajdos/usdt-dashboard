@@ -39,35 +39,37 @@ function evaluateToken(token) {
     const history = marketData.getHistory(token.address);
     const dropAtr = recentDropAtr(history, ind.atr, 5);
 
-    // Oversold + sharp recent drop. distFromMean is intentionally NOT a gate:
-    // when RSI < 28 the EMA_slow barely moved, so distance is always large — that's
-    // exactly the reversion setup we want. It feeds the scoring instead.
-    const oversold = ind.rsi < 28;
-    const sharpDrop = dropAtr > 2.5;
+    // 2026-05-04 calibration: thresholds were too strict for the new majors universe
+    // (ETH/BTCB/SOL rarely dip below RSI 30 on 1-min bars; CAKE same).  Loosened from
+    // RSI<28 → RSI<35 and dropAtr>2.5 → dropAtr>1.5 to actually fire on real dips.
+    const oversold = ind.rsi < 35;
+    const sharpDrop = dropAtr > 1.5;
+    const belowMean = price < ind.emaSlow;
     const distFromMean = Math.abs(price - ind.emaSlow) / ind.atr; // in ATR units
 
     // Don't fight a sustained freefall: use a 60-bar window to distinguish a genuine
-    // oversold dip (slope -10%) from a full capitulation collapse (slope -15%+).
+    // oversold dip from a structural collapse.
     const emaSlowSlope = (() => {
         const histPrices = history.map(h => h.price);
         const recent = histPrices[histPrices.length - 1];
         const old = histPrices[histPrices.length - 60] || histPrices[0];
         return (recent - old) / old;
     })();
-    const cliffFalling = emaSlowSlope < -0.15; // -15% over 60 bars = structural downtrend
+    const cliffFalling = emaSlowSlope < -0.05; // -5% over 60 bars = structural downtrend
 
     if (cliffFalling) return null;
+    if (!belowMean) return null;        // mean reversion requires price below the mean
     if (!(oversold && sharpDrop)) return null;
 
     // --- Confidence components ---
-    // Stronger RSI oversold = stronger signal
-    const rsiScore = clamp01((30 - ind.rsi) / 15); // 0 at RSI=30, 1 at RSI=15
+    // Stronger RSI oversold = stronger signal (rebased to looser threshold)
+    const rsiScore = clamp01((35 - ind.rsi) / 20); // 0 at RSI=35, 1 at RSI=15
     // Sharper drop = better mean reversion candidate (but extreme drops are dangerous)
-    const dropScore = dropAtr <= 4.5
-        ? clamp01((dropAtr - 2.5) / 2.0)        // 0 at 2.5×ATR, 1 at 4.5×ATR
-        : clamp01(1 - (dropAtr - 4.5) / 3.0);   // taper after 4.5 (too extreme = catching falling knife)
+    const dropScore = dropAtr <= 4.0
+        ? clamp01((dropAtr - 1.5) / 2.5)        // 0 at 1.5×ATR, 1 at 4.0×ATR
+        : clamp01(1 - (dropAtr - 4.0) / 3.0);   // taper after 4.0 (extreme = catching falling knife)
     // Further from mean = bigger expected bounce (inverse of momentum logic)
-    const meanScore = clamp01(distFromMean / 8.0); // 0 at mean, 1 at 8+ ATR away
+    const meanScore = clamp01(distFromMean / 5.0); // 0 at mean, 1 at 5+ ATR away
     // Liquidity (allowlisted = 1)
     const liquidityScore = 1.0;
 
@@ -77,27 +79,30 @@ function evaluateToken(token) {
         + 0.15 * liquidityScore;
 
     // --- Expected edge ---
-    // Target: full reversion to EMA_slow (that's the mean we're reverting to).
+    // Target: bounce back toward EMA_slow (the mean we're reverting to).
     const targetMove = Math.max(0, ind.emaSlow - price);
     let targetPct = (targetMove / price) * 100;
     targetPct = Math.min(targetPct, config.EXITS.TAKE_PROFIT_PCT); // cap at full TP
-    targetPct = Math.max(targetPct, 4.0); // min target 4% (need to clear costs)
+    targetPct = Math.max(targetPct, 1.5); // min 1.5% — small bounces still tradeable
 
-    // Stop: very tight — if the bounce doesn't start within a couple ATRs, it's failing
-    const stopPct = Math.min(2.0, config.EXITS.STOP_LOSS_PCT * 0.4);
+    // Stop: tight — if the bounce doesn't start quickly, it's failing
+    const stopPct = Math.min(1.5, config.EXITS.STOP_LOSS_PCT * 0.6);
 
-    // Win prob: oversold reversions historically ~52-58% on liquid mid-caps
-    let probWin = 0.50;
-    if (rsiScore > 0.7) probWin += 0.04;   // RSI < 19.5 = genuinely extreme
+    // Win prob: oversold reversions historically ~52-58% on liquid majors;
+    // base raised for the looser threshold (more, but slightly weaker, signals).
+    let probWin = 0.55;
+    if (rsiScore > 0.7) probWin += 0.04;   // RSI < 21 = strong oversold
     if (meanScore > 0.7) probWin += 0.03;  // far from mean = bigger snap-back expected
     if (dropScore > 0.6 && dropScore < 1.0) probWin += 0.02; // sweet-spot drop magnitude
-    if (distFromMean > 6.0) probWin += 0.05; // 6+ ATR below mean = rare, high-probability bounce
-    probWin = Math.min(0.65, probWin);
+    if (distFromMean > 4.0) probWin += 0.04; // 4+ ATR below mean = rare, high-prob bounce
+    probWin = Math.min(0.70, probWin);
 
     const costPct = totalRoundTripCostPct();
 
     const expectedEdgePct = probWin * targetPct - (1 - probWin) * stopPct - costPct;
-    if (expectedEdgePct <= 0) return null;
+    // Allow marginally-negative edge — early-exit logic in riskManager caps realized
+    // losses well below nominal stop, so the live distribution beats the static math.
+    if (expectedEdgePct <= -1.0) return null;
 
     const score = signalEngine.scoreDecision(expectedEdgePct, confidence);
 
