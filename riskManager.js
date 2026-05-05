@@ -194,6 +194,27 @@ function shouldExit(position, currentPrice, indicators) {
         return { shouldExit: true, reason: `reversion failed (RSI ${indicators.rsi.toFixed(0)}, still below mean, ${pnlPct.toFixed(2)}%)` };
     }
 
+    // 4c. Range-break exit — for RANGE entries the thesis is "price oscillates
+    // inside the 15-min band".  If price drops meaningfully below the band low
+    // (broke through support), the band is dead — don't wait for the SL hit.
+    if (position.strategy === 'RANGE'
+        && indicators && indicators.rollingLow15 != null
+        && ageMin >= config.EXITS.MOMENTUM_DEATH_MIN_AGE_MIN
+        && currentPrice < indicators.rollingLow15 * 0.998) {
+        return { shouldExit: true, reason: `range broken (price below 15m low, ${pnlPct.toFixed(2)}%)` };
+    }
+
+    // 4d. Range-quick-profit exit — if price reaches the upper half of the
+    // 15-min band while we're profitable, take it before the band rolls over.
+    if (position.strategy === 'RANGE'
+        && indicators && indicators.rollingHigh15 != null && indicators.rollingLow15 != null
+        && pnlPct > 1.0) {
+        const rangeMid = (indicators.rollingHigh15 + indicators.rollingLow15) / 2;
+        if (currentPrice >= rangeMid + 0.4 * (indicators.rollingHigh15 - rangeMid)) {
+            return { shouldExit: true, reason: `range hit upper band (${pnlPct.toFixed(2)}%)` };
+        }
+    }
+
     // 5. Stuck-loss exit — if a position is older than STUCK_LOSS_AGE_MIN and still
     // negative with no positive momentum, cut it instead of waiting for time stop.
     // Saves ~1-2% on each "drift to nowhere" trade vs the old 240-min timeout.

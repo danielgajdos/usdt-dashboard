@@ -93,6 +93,11 @@ module.exports = {
     STRATEGIES: {
         MOMENTUM: { enabled: true, weight: 1.0 },
         MEAN_REVERSION: { enabled: true, weight: 0.9 },
+        // RANGE: chop strategy — fires when price is near 15-min low in a defined
+        // band with no trend. Complementary to MOMENTUM (which needs uptrend) and
+        // MEAN_REVERSION (which needs RSI oversold). Marginal-EV by design at €25;
+        // early-exit logic is what makes it net positive.
+        RANGE: { enabled: true, weight: 0.85 },
         NEWS_DRIVEN: { enabled: process.env.ANTHROPIC_API_KEY ? true : false, weight: 1.1 },
         STABLE_ARB: { enabled: true, weight: 0.8 },
         COPY: { enabled: process.env.COPY_MODE === 'true', weight: 0.6 },
