@@ -118,8 +118,8 @@ function evaluateToken(token) {
         score,
         confidence,
         expectedEdgePct,
-        stopLossPct: Math.min(cappedStop, config.EXITS.STOP_LOSS_PCT),
-        takeProfitPct: Math.min(cappedTarget, config.EXITS.TAKE_PROFIT_PCT),
+        stopLossPct: config.EXITS.STOP_LOSS_PCT,
+        takeProfitPct: cappedTarget,
         signals: {
             momentum: {
                 breakout,
