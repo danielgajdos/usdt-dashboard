@@ -38,10 +38,12 @@ module.exports = {
     // --- THE single unified threshold block ---
     SIGNAL: {
         MIN_SCORE: 28,                    // 0-100; aggressive — math forces edgeScore≈0 at €25, so score=60×conf max. Need MIN low enough that high-conf signals pass during all sessions, including dead zone.
-        // At €25 with TP=4%, SL=2.5%, ~2.3% friction, breakeven probWin ≈ 0.74.
-        // Realized losses are mitigated by early-exit logic in riskManager.shouldExit
-        // (momentum-death and overheated-RSI exits cap losses well below SL_PCT).
-        MIN_EDGE_PCT_AFTER_COSTS: 0.0,    // edge can be marginal — early exits do the work
+        // 2026-05-07: With €150 sizing + V3 routing, friction is ~0.97%, so most
+        // signals can achieve marginal positive edge. But MR/RANGE on majors with
+        // tight bands often produce edge in [-1.0%, +0.3%]. Allowing slight
+        // negative edge through the unified gate trusts the early-exit logic to
+        // cap realized losses below the static math.
+        MIN_EDGE_PCT_AFTER_COSTS: -1.0,
         DECISION_TTL_SECONDS: 15,         // stale-decision invalidation
         TARGET_EDGE_PCT: 1.0              // achievable target after the TP cut
     },
