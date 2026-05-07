@@ -30,6 +30,19 @@ function evaluateToken(token) {
     const price = ind.price;
     if (!price || price <= 0) return null;
 
+    // --- Long-term trend filter ---
+    // 2026-05-07: first €150 trade lost €1.66 because ETH had a tiny short-term
+    // EMA blip up while drifting down on the longer view. Don't take long entries
+    // when the 60-bar (60min) trend is materially negative.
+    const history = marketData.getHistory(token.address);
+    const histPrices = history.map(h => h.price);
+    if (histPrices.length >= 60) {
+        const old60 = histPrices[histPrices.length - 60];
+        const recent = histPrices[histPrices.length - 1];
+        const longTrendPct = ((recent - old60) / old60) * 100;
+        if (longTrendPct < -0.30) return null; // 60min downtrend > 0.30% blocks long entries
+    }
+
     // --- Entry signals ---
     // 2026-05-07: on flat majors, EMAfast and EMAslow are essentially equal,
     // so strict ">" misses real opportunities. Use a 0.05% tolerance band
