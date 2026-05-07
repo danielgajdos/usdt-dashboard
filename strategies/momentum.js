@@ -31,7 +31,11 @@ function evaluateToken(token) {
     if (!price || price <= 0) return null;
 
     // --- Entry signals ---
-    const trendUp = ind.emaFast > ind.emaSlow && ind.emaFastSlope > 0;
+    // 2026-05-07: on flat majors, EMAfast and EMAslow are essentially equal,
+    // so strict ">" misses real opportunities. Use a 0.05% tolerance band
+    // so weak-but-real upward bias still qualifies.
+    const emaUp = ind.emaFast >= ind.emaSlow * 0.9995;
+    const trendUp = emaUp && ind.emaFastSlope > 0;
     const priorHigh = ind.rollingHigh15;
 
     const breakout = priorHigh !== null
@@ -39,13 +43,21 @@ function evaluateToken(token) {
         && trendUp;
 
     const rsiCrossedUp = ind.rsiPrev !== null && ind.rsiPrev < 50 && ind.rsi > 50;
-    const pullback = price > ind.emaSlow
-        && ind.emaFast > ind.emaSlow
+    const pullback = price > ind.emaSlow * 0.999
+        && emaUp
         && rsiCrossedUp
         && ind.atr !== null
         && Math.abs(price - ind.emaFast) < 0.5 * ind.atr;
 
-    if (!breakout && !pullback) return null;
+    // New: weak-trend RSI cross — RSI rising from below 45 to above 50 on neutral
+    // EMAs is a "small dip recovering" signal that the original conditions missed.
+    const rsiRecovery = ind.rsiPrev !== null
+        && ind.rsiPrev < 45
+        && ind.rsi >= 50
+        && ind.rsi < 65   // not overheated yet
+        && price >= ind.emaSlow * 0.997; // not in collapse
+
+    if (!breakout && !pullback && !rsiRecovery) return null;
 
     // --- Confidence components ---
     const trendStrength = ind.atr > 0
@@ -108,7 +120,9 @@ function evaluateToken(token) {
 
     const reason = breakout
         ? `breakout above 15m high; EMA↑; RSI ${ind.rsi.toFixed(0)}`
-        : `pullback to EMA; RSI cross↑ ${ind.rsi.toFixed(0)}`;
+        : pullback
+            ? `pullback to EMA; RSI cross↑ ${ind.rsi.toFixed(0)}`
+            : `RSI recovery (${ind.rsiPrev?.toFixed(0)}→${ind.rsi.toFixed(0)}); flat EMAs`;
 
     return signalEngine.emptyDecision({
         action: 'ENTER',

@@ -38,14 +38,15 @@ function evaluateToken(token) {
     // a 15-minute lookback, which is appropriate for the 60-min MAX_HOLD setup.
     const rangePct = ((ind.rollingHigh15 - ind.rollingLow15) / price) * 100;
 
-    // Range must be wide enough that the round-trip cost can be recovered, but
-    // not so wide that it suggests a broken-out trend rather than chop.
-    if (rangePct < 1.5 || rangePct > 6.0) return null;
+    // 2026-05-07: lowered min range from 1.5% to 0.8% — flat majors rarely
+    // produce 1.5%+ 15-min bands. TP floor stays at 2.5% so trades still
+    // need to clear friction; the marginal-EV math is acknowledged.
+    if (rangePct < 0.8 || rangePct > 6.0) return null;
 
     // Position within the range: 0 = exactly at low, 1 = exactly at high.
-    // Only buy in the lower 30% (closer to support).
+    // Buy in the lower 40% (loosened from 30% for more entry opportunities).
     const rangePos = (price - ind.rollingLow15) / (ind.rollingHigh15 - ind.rollingLow15);
-    if (rangePos > 0.30) return null;
+    if (rangePos > 0.40) return null;
 
     // Reject genuine trends — those should fire MOMENTUM, not RANGE.
     // 60-bar slope > 1.5% in either direction = trending, skip.
@@ -58,12 +59,12 @@ function evaluateToken(token) {
 
     // --- Confidence ---
     // Tighter to bottom of range = better entry
-    const positionScore = clamp01(1 - rangePos / 0.30); // 1 at bottom, 0 at the 30% gate
-    // Range size sweet spot: 2-4% (enough room for TP after costs, not too wide)
-    const rangeScore = (rangePct >= 2.0 && rangePct <= 4.0)
+    const positionScore = clamp01(1 - rangePos / 0.40); // 1 at bottom, 0 at the 40% gate
+    // Range size sweet spot: 1.5-4% (enough room for TP after costs, not too wide)
+    const rangeScore = (rangePct >= 1.5 && rangePct <= 4.0)
         ? 1.0
-        : (rangePct < 2.0
-            ? clamp01((rangePct - 1.5) / 0.5)
+        : (rangePct < 1.5
+            ? clamp01((rangePct - 0.8) / 0.7)
             : clamp01((6.0 - rangePct) / 2.0));
     // Liquidity (allowlisted = 1)
     const liquidityScore = 1.0;

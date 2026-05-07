@@ -39,11 +39,11 @@ function evaluateToken(token) {
     const history = marketData.getHistory(token.address);
     const dropAtr = recentDropAtr(history, ind.atr, 5);
 
-    // 2026-05-04 calibration: thresholds were too strict for the new majors universe
-    // (ETH/BTCB/SOL rarely dip below RSI 30 on 1-min bars; CAKE same).  Loosened from
-    // RSI<28 → RSI<35 and dropAtr>2.5 → dropAtr>1.5 to actually fire on real dips.
-    const oversold = ind.rsi < 35;
-    const sharpDrop = dropAtr > 1.5;
+    // 2026-05-07 (2nd relaxation): on the flat majors universe, RSI rarely
+    // touches 35 either (best seen: 37 on CAKE, 38 on ETH). Loosened further
+    // to fire on milder dips — early-exit logic catches the bad ones quickly.
+    const oversold = ind.rsi < 42;
+    const sharpDrop = dropAtr > 0.8;
     const belowMean = price < ind.emaSlow;
     const distFromMean = Math.abs(price - ind.emaSlow) / ind.atr; // in ATR units
 
@@ -63,10 +63,10 @@ function evaluateToken(token) {
 
     // --- Confidence components ---
     // Stronger RSI oversold = stronger signal (rebased to looser threshold)
-    const rsiScore = clamp01((35 - ind.rsi) / 20); // 0 at RSI=35, 1 at RSI=15
+    const rsiScore = clamp01((42 - ind.rsi) / 25); // 0 at RSI=42, 1 at RSI=17
     // Sharper drop = better mean reversion candidate (but extreme drops are dangerous)
     const dropScore = dropAtr <= 4.0
-        ? clamp01((dropAtr - 1.5) / 2.5)        // 0 at 1.5×ATR, 1 at 4.0×ATR
+        ? clamp01((dropAtr - 0.8) / 3.2)        // 0 at 0.8×ATR, 1 at 4.0×ATR
         : clamp01(1 - (dropAtr - 4.0) / 3.0);   // taper after 4.0 (extreme = catching falling knife)
     // Further from mean = bigger expected bounce (inverse of momentum logic)
     const meanScore = clamp01(distFromMean / 5.0); // 0 at mean, 1 at 5+ ATR away
@@ -102,7 +102,8 @@ function evaluateToken(token) {
     const expectedEdgePct = probWin * targetPct - (1 - probWin) * stopPct - costPct;
     // Allow marginally-negative edge — early-exit logic in riskManager caps realized
     // losses well below nominal stop, so the live distribution beats the static math.
-    if (expectedEdgePct <= -1.0) return null;
+    // 2026-05-07: relaxed from -1.0 → -2.0 to match RANGE strategy on this flat universe.
+    if (expectedEdgePct <= -2.0) return null;
 
     const score = signalEngine.scoreDecision(expectedEdgePct, confidence);
 
