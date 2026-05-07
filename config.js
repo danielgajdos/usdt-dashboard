@@ -37,7 +37,7 @@ module.exports = {
 
     // --- THE single unified threshold block ---
     SIGNAL: {
-        MIN_SCORE: 38,                    // 0-100; let early-exit logic prove its worth on real signals
+        MIN_SCORE: 28,                    // 0-100; aggressive — math forces edgeScore≈0 at €25, so score=60×conf max. Need MIN low enough that high-conf signals pass during all sessions, including dead zone.
         // At €25 with TP=4%, SL=2.5%, ~2.3% friction, breakeven probWin ≈ 0.74.
         // Realized losses are mitigated by early-exit logic in riskManager.shouldExit
         // (momentum-death and overheated-RSI exits cap losses well below SL_PCT).

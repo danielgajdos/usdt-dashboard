@@ -19,12 +19,15 @@
 
 'use strict';
 
-// Hour → regime multiplier lookup (UTC hours 0-23)
+// Hour → regime multiplier lookup (UTC hours 0-23).
+// 2026-05-07: softened the dead-zone (was 0.60-0.70) — early-exit logic now
+// catches false breakouts in 5-15min, so the heavy multiplier penalty was
+// killing too many otherwise-tradeable signals during the Asia/EU gap.
 const HOUR_MULTIPLIER = [
 //  0     1     2     3     4     5     6     7     8     9    10    11
-    0.85, 1.00, 1.00, 1.00, 0.70, 0.60, 0.65, 1.10, 1.10, 0.95, 0.95, 0.95,
+    0.90, 1.00, 1.00, 1.00, 0.85, 0.80, 0.85, 1.10, 1.10, 0.95, 0.95, 0.95,
 //  12    13    14    15    16    17    18    19    20    21    22    23
-    0.95, 1.15, 1.15, 1.00, 1.00, 1.00, 1.00, 1.00, 0.90, 0.90, 0.85, 0.85
+    0.95, 1.15, 1.15, 1.00, 1.00, 1.00, 1.00, 1.00, 0.95, 0.90, 0.90, 0.90
 ];
 
 const REGIME_NAMES = [
