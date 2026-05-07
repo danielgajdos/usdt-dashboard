@@ -1,7 +1,14 @@
 const https = require('https');
 const { ethers } = require('ethers');
-const { quote, sellPath } = require('./dexRegistry');
+const { quote, sellPath, bestQuote } = require('./dexRegistry');
 const { WBNB, USDT, BY_ADDRESS } = require('./tokens');
+
+// Per-token venue cache populated by the depth check. Read by execution.js to
+// pick the right router. Map<tokenAddrLower, { venue, fee }>.
+const TOKEN_VENUE = new Map();
+function getVenue(tokenAddress) {
+    return TOKEN_VENUE.get(tokenAddress.toLowerCase()) || null;
+}
 
 // Price history ring buffer per token, plus indicator calculators.
 //
@@ -81,25 +88,38 @@ function fetchBinanceKlines(binanceSymbol, limit = 5) {
 }
 
 // Check BSC DEX liquidity depth via on-chain quote.
-// Returns { price, depthOk } or null on failure.
+// Tries V2 multi-hop AND V3 single-hop, picks whichever has better depth.
+// Caches the chosen venue in TOKEN_VENUE so execution.js routes via the same
+// DEX (otherwise we'd quote on V3 then try to swap on V2 → no liquidity).
 async function fetchOnChainPrice(provider, tokenAddress, decimals) {
     try {
         const oneUnit = ethers.parseUnits('1', decimals);
-        const out = await quote(provider, 'PCS_V2', sellPath(tokenAddress), oneUnit);
-        if (out === null || out === 0n) return null;
-        const price = parseFloat(ethers.formatUnits(out, 18));
+        // Sell quote: 1 token → USDT (best venue)
+        const sellBest = await bestQuote(provider, tokenAddress, USDT, oneUnit);
+        if (!sellBest) return null;
+        const price = parseFloat(ethers.formatUnits(sellBest.amountOut, 18));
 
-        // Depth: quote a $25 buy; if effective price deviates >3% from spot → thin pool
+        // Buy quote: $QUOTE_NOTIONAL_USD → token (same direction as a real entry)
         const notional = ethers.parseUnits(String(QUOTE_NOTIONAL_USD), 18);
-        const buyOut = await quote(provider, 'PCS_V2', [USDT, WBNB, tokenAddress], notional);
+        const buyBest = await bestQuote(provider, USDT, tokenAddress, notional);
         let depthOk = true;
-        if (buyOut !== null && buyOut > 0n) {
-            const tokensGot = parseFloat(ethers.formatUnits(buyOut, decimals));
+        let executionVenue = sellBest.venue;
+        let executionFee = sellBest.fee || null;
+
+        if (buyBest && buyBest.amountOut > 0n) {
+            const tokensGot = parseFloat(ethers.formatUnits(buyBest.amountOut, decimals));
             const effectivePrice = QUOTE_NOTIONAL_USD / tokensGot;
             const deviation = Math.abs(effectivePrice - price) / price;
             depthOk = deviation < 0.03;
+            // Prefer the buy venue for execution since we open positions buy-first
+            executionVenue = buyBest.venue;
+            executionFee = buyBest.fee || null;
         }
-        return { price, depthOk };
+
+        // Cache venue+fee for execution.js to use on the actual swap.
+        TOKEN_VENUE.set(tokenAddress.toLowerCase(), { venue: executionVenue, fee: executionFee });
+
+        return { price, depthOk, venue: executionVenue, fee: executionFee };
     } catch {
         return null;
     }
@@ -326,6 +346,7 @@ module.exports = {
     getHistory,
     getLastPrice,
     computeIndicators,
+    getVenue,            // execution.js looks this up to route V2 vs V3
     ema,
     rsi,
     atr,
