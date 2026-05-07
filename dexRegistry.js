@@ -69,7 +69,11 @@ function sellPath(tokenIn) {
 
 const PCS_V3 = {
     name: 'PancakeSwap V3',
-    router: '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4',
+    // Direct V3 SwapRouter (has exactInputSingle as a top-level function).
+    // 2026-05-07: previously used 0x13f4...8Dd4 by mistake — that's the Smart
+    // Router (universal-router style with command-byte dispatch) and rejected
+    // exactInputSingle with empty-data revert at ~26k gas.
+    router: '0x1b81D678ffb9C0263b24A97847620C99d213eB14',
     quoter: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997'
 };
 
