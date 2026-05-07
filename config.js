@@ -49,12 +49,15 @@ module.exports = {
     // --- Risk (aggressive, calibrated for €100 live bankroll) ---
     RISK: {
         BASE_RISK_PCT: 20,                // 20% of cash as base bet, scaled by score
-        MAX_POSITION_EUR: 25,
-        MIN_POSITION_EUR: 18,
+        // 2026-05-07: bankroll scaled to $600. Position size bumped to €150 to
+        // dilute the $0.20 round-trip gas (was 2.3% of trade at €25, now 0.27%).
+        // Math at TP=4%/SL=2.5% goes from break-even at 47% win-rate to 36%.
+        MAX_POSITION_EUR: 150,
+        MIN_POSITION_EUR: 50,             // no point trading €25 at €600 bankroll
         MAX_CONCURRENT_POSITIONS: 3,
-        MAX_EXPOSURE_PCT: 75,
-        MAX_SINGLE_TOKEN_EXPOSURE_PCT: 25,
-        MIN_CASH_RESERVE_EUR: 20,
+        MAX_EXPOSURE_PCT: 75,             // 3 × €150 = €450 deployed max, €150 reserve
+        MAX_SINGLE_TOKEN_EXPOSURE_PCT: 25, // €150 single-token cap = exactly MAX_POSITION
+        MIN_CASH_RESERVE_EUR: 100,        // proportional reserve floor
         MIN_BNB_GAS_RESERVE: 0.01,        // ~€6 in BNB at $600
         MAX_DAILY_LOSS_PCT: 8,            // circuit breaker
         COOLDOWN_AFTER_LOSS_SECONDS: 1800,    // 30 min — protect against re-entering same token in chop
