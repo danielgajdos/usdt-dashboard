@@ -20,15 +20,11 @@
 'use strict';
 
 // Hour → regime multiplier lookup (UTC hours 0-23).
-// 2026-05-07: softened the dead-zone (was 0.60-0.70) — early-exit logic now
-// catches false breakouts in 5-15min, so the heavy multiplier penalty was
-// killing too many otherwise-tradeable signals during the Asia/EU gap.
-const HOUR_MULTIPLIER = [
-//  0     1     2     3     4     5     6     7     8     9    10    11
-    0.90, 1.00, 1.00, 1.00, 0.85, 0.80, 0.85, 1.10, 1.10, 0.95, 0.95, 0.95,
-//  12    13    14    15    16    17    18    19    20    21    22    23
-    0.95, 1.15, 1.15, 1.00, 1.00, 1.00, 1.00, 1.00, 0.95, 0.90, 0.90, 0.90
-];
+// 2026-05-08 (4h timeframe pivot): flattened to 1.0 across all hours.
+// Hourly liquidity bias is irrelevant when we trade once-every-few-days on
+// 4h bars — entries fire whenever a multi-day swing setup completes,
+// regardless of the specific UTC hour. Cooldown handles repeat-entry guard.
+const HOUR_MULTIPLIER = new Array(24).fill(1.00);
 
 const REGIME_NAMES = [
 //  0            1            2            3            4            5

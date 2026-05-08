@@ -28,10 +28,14 @@ function getVenue(tokenAddress) {
 // on-chain every DEPTH_CHECK_INTERVAL ticks — much less often than the price feed
 // to avoid spamming the RPC.
 
-const BUFFER_SIZE = 180;               // 180 × 1-min bars = 3h history (plenty for EMA60)
+// 2026-05-08: TIMEFRAME PIVOT — switched klines from 1-minute to 4-hour bars.
+// 1-minute scalping had no edge after 21/21 losses. 4h swing trading targets
+// multi-day moves where retail TA actually has historical edge.
+const BUFFER_SIZE = 180;               // 180 × 4h bars = 30 days of history
 const QUOTE_NOTIONAL_USD = 25;
 const DEPTH_CHECK_INTERVAL = 30;       // re-check on-chain depth every 30 ticks (~150s)
-const KLINE_INTERVAL_MS = 60_000;      // 1-minute bars
+const KLINE_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4-hour bars
+const KLINE_INTERVAL_STR = '4h';       // Binance API param
 
 // Map<tokenAddressLower, {history: [], lastUpdate: 0, lastDepthOk: true, depthCheckCount: 0, lastKlineCloseTime: 0}>
 const state = new Map();
@@ -57,7 +61,7 @@ function _init(address) {
 // whose closeTime is in the future — we filter it out so only closed bars are used.
 function fetchBinanceKlines(binanceSymbol, limit = 5) {
     return new Promise((resolve) => {
-        const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(binanceSymbol)}&interval=1m&limit=${limit}`;
+        const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(binanceSymbol)}&interval=${KLINE_INTERVAL_STR}&limit=${limit}`;
         const req = https.get(url, { timeout: 4000 }, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);

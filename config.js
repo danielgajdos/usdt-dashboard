@@ -37,15 +37,14 @@ module.exports = {
 
     // --- THE single unified threshold block ---
     SIGNAL: {
-        MIN_SCORE: 28,                    // 0-100; aggressive — math forces edgeScore≈0 at €25, so score=60×conf max. Need MIN low enough that high-conf signals pass during all sessions, including dead zone.
-        // 2026-05-07: With €150 sizing + V3 routing, friction is ~0.97%, so most
-        // signals can achieve marginal positive edge. But MR/RANGE on majors with
-        // tight bands often produce edge in [-1.0%, +0.3%]. Allowing slight
-        // negative edge through the unified gate trusts the early-exit logic to
-        // cap realized losses below the static math.
-        MIN_EDGE_PCT_AFTER_COSTS: -1.0,
-        DECISION_TTL_SECONDS: 15,         // stale-decision invalidation
-        TARGET_EDGE_PCT: 1.0              // achievable target after the TP cut
+        // 2026-05-08: TIMEFRAME PIVOT to 4-hour bars.
+        // Klines fetched at interval=4h. EMAs/RSI/ATR all on 4h candles.
+        // Targets ~10x larger relative to friction → static math is genuinely positive.
+        // Tighter gate now that signals are higher-quality (multi-day swings, not 1-min noise).
+        MIN_SCORE: 50,
+        MIN_EDGE_PCT_AFTER_COSTS: 1.0,    // require real positive expected edge
+        DECISION_TTL_SECONDS: 60,         // 4h regime — give signals more time before staling
+        TARGET_EDGE_PCT: 4.0              // typical achievable edge on 4h swings
     },
 
     // --- Risk (aggressive, calibrated for €100 live bankroll) ---
@@ -62,7 +61,7 @@ module.exports = {
         MIN_CASH_RESERVE_EUR: 100,        // proportional reserve floor
         MIN_BNB_GAS_RESERVE: 0.01,        // ~€6 in BNB at $600
         MAX_DAILY_LOSS_PCT: 8,            // circuit breaker
-        COOLDOWN_AFTER_LOSS_SECONDS: 1800,    // 30 min — protect against re-entering same token in chop
+        COOLDOWN_AFTER_LOSS_SECONDS: 86400,   // 24h — at 4h timeframe, don't re-trade the same setup the same day
         // Phase 3 shadow-live cap: temporarily override MAX_POSITION_EUR to €5 via env.
         SHADOW_LIVE_CAP_EUR: process.env.SHADOW_LIVE_CAP_EUR
             ? parseFloat(process.env.SHADOW_LIVE_CAP_EUR)
@@ -70,19 +69,19 @@ module.exports = {
     },
 
     EXITS: {
-        // Recalibrated for actual BSC mid-cap volatility (ATR ≈ 0.01-0.05%/min).
-        // Old 13% TP was unreachable inside MAX_HOLD; ALL 12 trades since
-        // 2026-04-29 timed out at 240min with -2 to -3% drift losses.
-        // New TP=4% is reachable in 30-60min during active sessions; SL=2.5%
-        // covers round-trip cost (~2.3%) with small margin.
-        STOP_LOSS_PCT: 2.5,
-        TAKE_PROFIT_PCT: 4.0,
-        TRAIL_ATR_MULTIPLE: 1.0,          // tighter trail after TP1
-        MAX_HOLD_MINUTES: 60,             // faster cycling: 4h → 1h
-        // Early-exit thresholds (used by riskManager.shouldExit alongside SL/TP/timeout)
-        MOMENTUM_DEATH_MIN_AGE_MIN: 5,    // grace period after entry before checking EMA reversion
-        OVERHEATED_RSI: 75,               // exit profitable position when RSI tags this
-        STUCK_LOSS_AGE_MIN: 15            // exit losing positions early if signal dead
+        // 2026-05-08: 4h-timeframe pivot. ETH 4h ATR ≈ 1.5-3%, BTC ≈ 1-2%, SOL ≈ 2-4%.
+        // Targets/stops scaled to multi-day swing magnitudes:
+        //   - Hitting +10% TP in 3 days = ~3-5 ATR move (achievable on real trends)
+        //   - Hitting -5% SL in 3 days = ~2-3 ATR move (early exits cap most losses well before)
+        //   - 0.97% friction is now <10% of TP (was 24% at TP=4%)
+        STOP_LOSS_PCT: 5.0,
+        TAKE_PROFIT_PCT: 10.0,
+        TRAIL_ATR_MULTIPLE: 1.5,
+        MAX_HOLD_MINUTES: 4320,           // 72h = 3 days
+        // Grace periods adapted to 4h bars (1 bar = 240 min):
+        MOMENTUM_DEATH_MIN_AGE_MIN: 240,  // 4h grace — wait one full bar before checking EMA reversion
+        OVERHEATED_RSI: 75,               // RSI is timeframe-agnostic, threshold unchanged
+        STUCK_LOSS_AGE_MIN: 720           // 12h grace — three bars before cutting stuck losers
     },
 
     COSTS: {
@@ -98,11 +97,10 @@ module.exports = {
     STRATEGIES: {
         MOMENTUM: { enabled: true, weight: 1.0 },
         MEAN_REVERSION: { enabled: true, weight: 0.9 },
-        // RANGE: chop strategy — fires when price is near 15-min low in a defined
-        // band with no trend. Complementary to MOMENTUM (which needs uptrend) and
-        // MEAN_REVERSION (which needs RSI oversold). Marginal-EV by design at €25;
-        // early-exit logic is what makes it net positive.
-        RANGE: { enabled: true, weight: 0.85 },
+        // RANGE: disabled at 4h timeframe — its 15-bar lookback (= 60h band) and
+        // tight 1.2% stop don't translate to swing trading. Re-enable only with
+        // a 4h-specific reimplementation (multi-day support/resistance bands).
+        RANGE: { enabled: false, weight: 0.85 },
         NEWS_DRIVEN: { enabled: process.env.ANTHROPIC_API_KEY ? true : false, weight: 1.1 },
         STABLE_ARB: { enabled: true, weight: 0.8 },
         COPY: { enabled: process.env.COPY_MODE === 'true', weight: 0.6 },

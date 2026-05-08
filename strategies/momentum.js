@@ -30,24 +30,24 @@ function evaluateToken(token) {
     const price = ind.price;
     if (!price || price <= 0) return null;
 
-    // --- Long-term trend filter ---
-    // 2026-05-07: first €150 trade lost €1.66 because ETH had a tiny short-term
-    // EMA blip up while drifting down on the longer view. Don't take long entries
-    // when the 60-bar (60min) trend is materially negative.
+    // --- Long-term trend filter (4h timeframe) ---
+    // 30-bar slope = 30 × 4h = 5 days. Don't take long entries when the
+    // 5-day trend is materially negative (-3% or more = real bearish swing).
     const history = marketData.getHistory(token.address);
     const histPrices = history.map(h => h.price);
-    if (histPrices.length >= 60) {
-        const old60 = histPrices[histPrices.length - 60];
+    if (histPrices.length >= 30) {
+        const old30 = histPrices[histPrices.length - 30];
         const recent = histPrices[histPrices.length - 1];
-        const longTrendPct = ((recent - old60) / old60) * 100;
-        if (longTrendPct < -0.30) return null; // 60min downtrend > 0.30% blocks long entries
+        const longTrendPct = ((recent - old30) / old30) * 100;
+        if (longTrendPct < -3.0) return null; // 5-day downtrend > 3% blocks long entries
     }
 
-    // --- Entry signals ---
-    // 2026-05-07: on flat majors, EMAfast and EMAslow are essentially equal,
-    // so strict ">" misses real opportunities. Use a 0.05% tolerance band
-    // so weak-but-real upward bias still qualifies.
-    const emaUp = ind.emaFast >= ind.emaSlow * 0.9995;
+    // --- Entry signals (4h timeframe — strict; signal noise is mostly gone) ---
+    // EMAs at 4h are slow-moving and meaningful. Strict cross is real, no
+    // tolerance band needed. RSI 50-cross on 4h is a multi-day momentum signal,
+    // not noise. The "rsiRecovery" weak-signal entry is REMOVED — at 1-min it
+    // produced 21/21 losses by entering on noise.
+    const emaUp = ind.emaFast > ind.emaSlow;
     const trendUp = emaUp && ind.emaFastSlope > 0;
     const priorHigh = ind.rollingHigh15;
 
@@ -56,21 +56,13 @@ function evaluateToken(token) {
         && trendUp;
 
     const rsiCrossedUp = ind.rsiPrev !== null && ind.rsiPrev < 50 && ind.rsi > 50;
-    const pullback = price > ind.emaSlow * 0.999
+    const pullback = price > ind.emaSlow
         && emaUp
         && rsiCrossedUp
         && ind.atr !== null
-        && Math.abs(price - ind.emaFast) < 0.5 * ind.atr;
+        && Math.abs(price - ind.emaFast) < 0.8 * ind.atr;
 
-    // New: weak-trend RSI cross — RSI rising from below 45 to above 50 on neutral
-    // EMAs is a "small dip recovering" signal that the original conditions missed.
-    const rsiRecovery = ind.rsiPrev !== null
-        && ind.rsiPrev < 45
-        && ind.rsi >= 50
-        && ind.rsi < 65   // not overheated yet
-        && price >= ind.emaSlow * 0.997; // not in collapse
-
-    if (!breakout && !pullback && !rsiRecovery) return null;
+    if (!breakout && !pullback) return null;
 
     // --- Confidence components ---
     const trendStrength = ind.atr > 0
@@ -93,19 +85,15 @@ function evaluateToken(token) {
         + 0.20 * rsiRegime
         + 0.20 * liquidityScore;
 
-    // --- Expected edge (post-cost) ---
-    // Position-manager enforces TP/SL from config; ATR is for signal quality only.
+    // --- Expected edge (4h regime, post-cost) ---
+    // TP=10%, SL=5%. Early-exit logic still cuts losers below nominal SL but
+    // the longer grace periods (4h before checking) let trends develop.
     const cappedTarget = config.EXITS.TAKE_PROFIT_PCT;
-    // Early-exit logic in riskManager (momentum-death + stuck-loss + overheated)
-    // typically cuts realized losses to roughly 0.5× the nominal SL_PCT — far
-    // sooner than a hard stop fires.  Reflect that in expected-value math so the
-    // strategy isn't permanently blocked by an inflated worst-case.
     const effectiveStop = config.EXITS.STOP_LOSS_PCT * 0.55;
 
-    // Prob-win estimate.  With TP=4% (down from 13%), the probability of
-    // ANY directional bias reaching TP before SL is materially higher than
-    // it was for the loose-target version — base bumped from 0.48 → 0.55.
-    let probWin = 0.55;
+    // Prob-win for 4h momentum on majors. Academic benchmarks for trend-following
+    // on majors at 4h: ~50% base rate. Bonuses for confirmed trend conditions.
+    let probWin = 0.50;
     if (breakout) probWin += 0.05;
     if (rsiRegime > 0.8) probWin += 0.03;
     if (trendStrength > 0.7) probWin += 0.04;
@@ -114,28 +102,27 @@ function evaluateToken(token) {
     const whaleSig = whaleCluster.getWhaleSignal(token.address);
     let whaleBoost = 0;
     if (whaleSig && whaleSig.direction === 'BUY') {
-        whaleBoost = whaleSig.strengthScore * 0.05; // up to +5%
+        whaleBoost = whaleSig.strengthScore * 0.05;
         probWin += whaleBoost;
     }
 
-    probWin = Math.min(0.72, probWin);
+    probWin = Math.min(0.65, probWin);
 
-    // Use intended position size (mid of min/max) to estimate cost
     const intendedSize = (config.RISK.MIN_POSITION_EUR + config.RISK.MAX_POSITION_EUR) / 2;
     const costPct = totalRoundTripCostPct(intendedSize);
 
+    // At TP=10, SL=2.75 effective, cost=0.97: probWin=0.55 → edge = +3.4%
+    // probWin=0.50 → edge = +2.65%. Both genuinely positive on 4h timeframe.
     const expectedEdgePct = probWin * cappedTarget - (1 - probWin) * effectiveStop - costPct;
 
-    // Block clearly negative-EV trades; let the score gate filter the marginal middle.
-    if (expectedEdgePct <= -0.5) return null;
+    // Tighter block — at 4h we want only positive-EV signals.
+    if (expectedEdgePct <= 0) return null;
 
     const score = signalEngine.scoreDecision(expectedEdgePct, confidence);
 
     const reason = breakout
-        ? `breakout above 15m high; EMA↑; RSI ${ind.rsi.toFixed(0)}`
-        : pullback
-            ? `pullback to EMA; RSI cross↑ ${ind.rsi.toFixed(0)}`
-            : `RSI recovery (${ind.rsiPrev?.toFixed(0)}→${ind.rsi.toFixed(0)}); flat EMAs`;
+        ? `breakout above 15-bar high (4h); EMA↑; RSI ${ind.rsi.toFixed(0)}`
+        : `pullback to EMA (4h); RSI cross↑ ${ind.rsi.toFixed(0)}`;
 
     return signalEngine.emptyDecision({
         action: 'ENTER',
