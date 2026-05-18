@@ -36,35 +36,72 @@ function evaluateToken(token) {
     if (!ind.atr || ind.atr <= 0) return null;
 
     // --- Mean reversion entry conditions ---
+    // 2026-05-15: After 3 post-pivot MR trades all lost via "reversion failed
+    // (RSI 23, still below mean)", we now demand THREE confirmations before
+    // catching the knife:
+    //   FIX 1 — RSI turn-up (was oversold within ~12h, now rising past 30)
+    //   FIX 2 — short-term trend not aggressively bearish (30-bar slope > -3%)
+    //   FIX 3 — structural support: price near a tested 7-day low
     const history = marketData.getHistory(token.address);
+    const histPrices = history.map(h => h.price);
+    const histLows   = history.map(h => h.low || h.price);
     const dropAtr = recentDropAtr(history, ind.atr, 5);
+    const distFromMean = Math.abs(price - ind.emaSlow) / ind.atr;
 
-    // 2026-05-08 (4h timeframe): real oversold means RSI<30 on 4h chart —
-    // a genuine multi-day capitulation, not noise. Tightened back from
-    // RSI<42 (which produced 9/9 losses on 1-min). On 4h, RSI<30 is rare
-    // and historically bounces ~55% of the time on majors.
-    const oversold = ind.rsi < 30;
-    const sharpDrop = dropAtr > 1.5;
-    const belowMean = price < ind.emaSlow;
-    const distFromMean = Math.abs(price - ind.emaSlow) / ind.atr; // in ATR units
+    // Pure oversold flag still useful for confidence scoring
+    const oversoldNow    = ind.rsi < 30;
+    const sharpDrop      = dropAtr > 1.5;
+    const belowMean      = price < ind.emaSlow;
 
-    // Don't fight a sustained freefall. At 4h timeframe, 60 bars = 10 days.
-    // -15% over 10 days = structural bear trend (not a dip), skip.
-    const emaSlowSlope = (() => {
-        const histPrices = history.map(h => h.price);
-        const recent = histPrices[histPrices.length - 1];
-        const old = histPrices[histPrices.length - 60] || histPrices[0];
-        return (recent - old) / old;
-    })();
-    const cliffFalling = emaSlowSlope < -0.15;
+    // FIX 1 — RSI turn-up confirmation. rsiMin5 = lowest RSI in last 5 bars
+    // (~20h on 4h klines).  Setup: RSI went below 30 sometime in the last 20h
+    // AND has now risen at least 3 points off that low AND is back above 30 but
+    // not yet past full recovery.  Without this, the strategy buys WHILE still
+    // falling — exactly the failure mode of the last 3 losing trades.
+    const rsiTurnedUp = ind.rsiMin5 !== null
+        && ind.rsiMin5 < 30           // hit oversold within last ~20h
+        && ind.rsi >= ind.rsiMin5 + 3 // RSI has climbed ≥3 points off the low
+        && ind.rsi >= 32              // confirmed back above oversold zone
+        && ind.rsi < 50;              // not already past full recovery
 
-    if (cliffFalling) return null;
-    if (!belowMean) return null;        // mean reversion requires price below the mean
-    if (!(oversold && sharpDrop)) return null;
+    // FIX 2 — short-term trend filter. 30-bar (5-day at 4h) slope must NOT be
+    // strongly negative. MR buying a dip in a real downtrend = catching knives.
+    // Original cliffFalling at -15%/10d was way too loose.
+    let shortTrendPct = 0;
+    if (histPrices.length >= 30) {
+        const old30 = histPrices[histPrices.length - 30];
+        shortTrendPct = ((histPrices[histPrices.length - 1] - old30) / old30) * 100;
+    }
+    const aggressiveDowntrend = shortTrendPct < -3.0;  // -3% over 5 days
+
+    // FIX 3 — structural support. We want price near a 7-day low that has been
+    // tested multiple times (= an actual support level), not a fresh low (= the
+    // floor is still being discovered, more downside likely).
+    // 7 days on 4h = 42 bars. Use bar LOWs (not closes) for honest support.
+    let nearSupport = false;
+    let supportTouches = 0;
+    if (histLows.length >= 42) {
+        const recent42 = histLows.slice(-42);
+        const support = Math.min(...recent42);
+        const distFromSupportPct = ((price - support) / support) * 100;
+        nearSupport = distFromSupportPct < 2.5;        // price within 2.5% of the 7-day low
+        // Count bars (across whole 30-day window) that touched within 1.5% of this support
+        supportTouches = histLows.filter(p => p > 0 && p <= support * 1.015).length;
+    }
+    const supportTested = nearSupport && supportTouches >= 3;
+
+    // Hard filters (any fail = no trade)
+    if (aggressiveDowntrend) return null;       // FIX 2
+    if (!belowMean) return null;
+    if (!rsiTurnedUp) return null;              // FIX 1 — require the turn-up
+    if (!sharpDrop) return null;
+    if (!supportTested) return null;            // FIX 3 — at tested support
 
     // --- Confidence components ---
-    // Strong RSI oversold = stronger signal (4h regime, RSI<30 threshold)
-    const rsiScore = clamp01((30 - ind.rsi) / 15); // 0 at RSI=30, 1 at RSI=15
+    // Score on the DEEPEST recent oversold (rsiMin5), not current rsi
+    // which by definition has already crossed back above 30.
+    const oversoldDepth = ind.rsiMin5 !== null ? ind.rsiMin5 : ind.rsi;
+    const rsiScore = clamp01((30 - oversoldDepth) / 15); // 0 at RSI=30, 1 at RSI=15
     // Sharper drop = better mean-reversion candidate (extreme drops = falling knife)
     const dropScore = dropAtr <= 4.0
         ? clamp01((dropAtr - 1.5) / 2.5)        // 0 at 1.5×ATR, 1 at 4.0×ATR
@@ -90,13 +127,16 @@ function evaluateToken(token) {
     // Stop wider on 4h: 4h ATR can be 2-4%, so a 1.5% stop would be 1 ATR (whipsaw).
     const stopPct = config.EXITS.STOP_LOSS_PCT * 0.6; // 3% effective stop
 
-    // Win prob: oversold reversions on majors at 4h timeframe historically 50-60%.
-    let probWin = 0.50;
-    if (rsiScore > 0.7) probWin += 0.05;   // RSI<22 = deep oversold
+    // Win prob: oversold + turn-up + tested support on majors at 4h timeframe.
+    // Higher base (0.55) because we now require 3 confirmations vs 1 before;
+    // signal quality is materially better even though rate-of-fire is lower.
+    let probWin = 0.55;
+    if (rsiScore > 0.7) probWin += 0.05;   // RSI was <22 = deep oversold
     if (meanScore > 0.7) probWin += 0.03;
     if (dropScore > 0.6 && dropScore < 1.0) probWin += 0.03;
     if (distFromMean > 4.0) probWin += 0.04;
-    probWin = Math.min(0.65, probWin);
+    if (supportTouches >= 5) probWin += 0.04; // strong support → higher confidence
+    probWin = Math.min(0.70, probWin);
 
     const costPct = totalRoundTripCostPct();
     const expectedEdgePct = probWin * targetPct - (1 - probWin) * stopPct - costPct;
@@ -121,15 +161,18 @@ function evaluateToken(token) {
         signals: {
             meanReversion: {
                 rsi: ind.rsi,
+                rsiPrev: ind.rsiPrev,
                 dropAtr,
                 distFromMean,
+                shortTrendPct,
+                supportTouches,
                 emaFast: ind.emaFast,
                 emaSlow: ind.emaSlow,
                 price,
                 atr: ind.atr
             }
         },
-        reason: `oversold (RSI ${ind.rsi.toFixed(0)}); −${dropAtr.toFixed(1)}×ATR drop; ${distFromMean.toFixed(1)}×ATR below mean; target EMA_slow ${ind.emaSlow.toFixed(3)}`
+        reason: `RSI turn-up min5=${ind.rsiMin5?.toFixed(0)}→${ind.rsi.toFixed(0)}; trend ${shortTrendPct.toFixed(1)}% 5d; ${supportTouches}× support tested; ${distFromMean.toFixed(1)}×ATR below mean → EMA_slow ${ind.emaSlow.toFixed(3)}`
     });
 }
 

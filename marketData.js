@@ -315,6 +315,10 @@ function computeIndicators(tokenAddress) {
         emaFastSlope,
         rsi: rsiSer[rsiSer.length - 1],
         rsiPrev: rsiSer.length >= 4 ? rsiSer[rsiSer.length - 4] : null,
+        // rsiMin5 = lowest RSI in the last 5 closed bars (= 20h on 4h klines).
+        // Used by MEAN_REVERSION to detect "was oversold recently" robustly,
+        // regardless of whether the bottom was 1, 2, or 3 bars back.
+        rsiMin5: rsiSer.length >= 5 ? Math.min(...rsiSer.slice(-5)) : (rsiSer[rsiSer.length - 1] ?? null),
         atr: atr(prices, 14),
         rollingHigh15: rollingHigh(prices.slice(0, -1), 15),
         rollingLow15: rollingLow(prices.slice(0, -1), 15),
