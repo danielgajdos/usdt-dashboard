@@ -25,6 +25,17 @@ signalEngine.register(stableArbStrategy);
 const newsLLM = require('./signals/newsLLM');
 const whaleCluster = require('./signals/whaleCluster');
 
+// 2026-05-24 — new layers from Vibe-Trading + AutoHedge synthesis:
+//   sentiment: macro bias (BTC+ETH 24h) — used to gate longs in clear bears
+//   factors:   funding rate, volume bias, OBI — additional confidence inputs
+//   decisionLog: persistent ledger + adaptive strategy weighting
+const sentiment = require('./signals/sentiment');
+const decisionLog = require('./decisionLog');
+
+// Apply adaptive strategy weights from past performance at startup.
+// Reads decision log, computes per-strategy PF, scales config.STRATEGIES[X].weight.
+decisionLog.applyAdaptiveWeights(msg => console.log(`[boot] ${msg}`));
+
 const botState = {
     isRunning: false,
     mode: config.SIMULATION_MODE ? 'SIMULATION' : 'LIVE',
@@ -295,6 +306,7 @@ async function processExits(signer) {
                 const pnlColor = closed.pnl > 0 ? 'success' : 'error';
                 log(`Closed ${pos.symbol}: PnL €${closed.pnl.toFixed(2)} (${closed.pnlPercent.toFixed(2)}%) — ${check.reason}`, pnlColor);
                 if (closed.pnl <= 0) riskManager.recordLoss(pos.token);
+                decisionLog.logExit(pos, exitEur, closed.pnl, closed.pnlPercent, check.reason);
                 portfolio.takeSnapshot(); // capture the inflection point on the equity curve
             }
         }
@@ -326,6 +338,17 @@ async function processEntries(provider, signer) {
 
     if (decisions.length === 0) return;
 
+    // 2026-05-24 — macro sentiment gate.  In a synchronized bearish market (BTC+ETH
+    // down >2% on the day), retail momentum entries get crushed.  Skip all LONG
+    // entries when market bias is clearly bearish with confidence.
+    const bias = await sentiment.getMarketBias();
+    const blockedByMarket = bias.verdict === 'bearish' && bias.confidence >= 0.4;
+    if (blockedByMarket && decisions.length > 0) {
+        // Log once per scan, not per decision
+        log(`[sentiment] BEARISH market (BTC ${bias.details?.btc24h?.toFixed(1)}% / ETH ${bias.details?.eth24h?.toFixed(1)}% 24h, conf ${bias.confidence.toFixed(2)}) — blocking ${decisions.length} long entries this tick`, 'info');
+        return;
+    }
+
     // Attach sizing and filter through risk manager.
     // `livePort` is re-read after each successful entry so subsequent decisions
     // see the freshly-opened positions — prevents two strategies from buying the
@@ -341,6 +364,7 @@ async function processEntries(provider, signer) {
             if (decision.score >= config.SIGNAL.MIN_SCORE - 15) {
                 log(`[${decision.strategy}] ${decision.symbol} gate block (score=${decision.score}): ${gate.reason}`, 'info');
             }
+            decisionLog.logGateBlock(decision, gate.reason);
             continue;
         }
 
@@ -367,6 +391,7 @@ async function processEntries(provider, signer) {
 
         botState.stats.decisionsExecuted++;
         botState.stats.opportunities++;
+        decisionLog.logEntry(decision);
 
         portfolio.openPosition({
             strategy: decision.strategy,

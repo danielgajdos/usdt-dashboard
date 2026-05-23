@@ -349,6 +349,36 @@ function _seedTestHistory(tokenAddress, prices, { depthOk = true, intervalMs = 5
     s.lastUpdate = s.history[s.history.length - 1]?.t || now;
 }
 
+// BACKTEST helper. Seeds with full OHLC bars (high/low needed for support
+// detection in MR's Fix 3). Replaces existing history wholesale.
+function _seedHistoryBars(tokenAddress, bars, { depthOk = true } = {}) {
+    const s = _init(tokenAddress);
+    s.history = bars.map(b => ({
+        t: b.t || b.closeTime,
+        price: b.close ?? b.price,
+        high: b.high ?? b.close ?? b.price,
+        low:  b.low  ?? b.close ?? b.price,
+        depthOk
+    }));
+    s.lastUpdate = s.history[s.history.length - 1]?.t || Date.now();
+    s.lastKlineCloseTime = s.history[s.history.length - 1]?.t || 0;
+}
+
+// BACKTEST helper. Appends a single bar (used to advance the simulation one step).
+function _appendBar(tokenAddress, bar, { depthOk = true } = {}) {
+    const s = _init(tokenAddress);
+    s.history.push({
+        t: bar.t || bar.closeTime,
+        price: bar.close ?? bar.price,
+        high: bar.high ?? bar.close ?? bar.price,
+        low:  bar.low  ?? bar.close ?? bar.price,
+        depthOk
+    });
+    if (s.history.length > BUFFER_SIZE) s.history.shift();
+    s.lastUpdate = s.history[s.history.length - 1].t;
+    s.lastKlineCloseTime = s.history[s.history.length - 1].t;
+}
+
 module.exports = {
     refreshPrice,
     getHistory,
@@ -362,5 +392,7 @@ module.exports = {
     rollingLow,
     resetAll,
     _seedTestHistory,
+    _seedHistoryBars,
+    _appendBar,
     BUFFER_SIZE
 };
