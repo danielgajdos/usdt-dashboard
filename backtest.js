@@ -36,10 +36,13 @@ const STRATEGY  = arg('strategy', null);
 const SIZE_EUR  = parseFloat(arg('size', '100'));
 const VERBOSE   = args.includes('--verbose');
 
+const SKIP_SYM = arg('skip', null); // comma-separated list of symbols to exclude
+const skipSet = new Set((SKIP_SYM || '').split(',').filter(Boolean).map(s => s.toUpperCase()));
 const tokensToTest = TOKEN_SYM
     ? [BY_SYMBOL[TOKEN_SYM.toUpperCase()]].filter(Boolean)
-    : TOKENS.filter(t => t.binanceSymbol);
+    : TOKENS.filter(t => t.binanceSymbol && !skipSet.has(t.symbol.toUpperCase()));
 if (!tokensToTest.length) { console.error('Unknown or untradeable token'); process.exit(1); }
+if (skipSet.size) console.log(`Skipping tokens: ${[...skipSet].join(',')}`);
 
 if (STRATEGY) {
     for (const k of Object.keys(config.STRATEGIES)) {

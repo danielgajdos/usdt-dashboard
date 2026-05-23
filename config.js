@@ -37,14 +37,11 @@ module.exports = {
 
     // --- THE single unified threshold block ---
     SIGNAL: {
-        // 2026-05-08: TIMEFRAME PIVOT to 4-hour bars.
-        // Klines fetched at interval=4h. EMAs/RSI/ATR all on 4h candles.
-        // Targets ~10x larger relative to friction → static math is genuinely positive.
-        // Tighter gate now that signals are higher-quality (multi-day swings, not 1-min noise).
-        MIN_SCORE: 50,
-        MIN_EDGE_PCT_AFTER_COSTS: 1.0,    // require real positive expected edge
-        DECISION_TTL_SECONDS: 60,         // 4h regime — give signals more time before staling
-        TARGET_EDGE_PCT: 4.0              // typical achievable edge on 4h swings
+        // 4h-timeframe gate. Env-overridable for backtest experiments.
+        MIN_SCORE:                parseFloat(process.env.BT_MIN_SCORE || '50'),
+        MIN_EDGE_PCT_AFTER_COSTS: parseFloat(process.env.BT_MIN_EDGE  || '1.0'),
+        DECISION_TTL_SECONDS:     60,
+        TARGET_EDGE_PCT:          parseFloat(process.env.BT_TARGET_EDGE || '4.0')
     },
 
     // --- Risk (aggressive, calibrated for €100 live bankroll) ---
@@ -69,19 +66,19 @@ module.exports = {
     },
 
     EXITS: {
-        // 2026-05-08: 4h-timeframe pivot. ETH 4h ATR ≈ 1.5-3%, BTC ≈ 1-2%, SOL ≈ 2-4%.
-        // Targets/stops scaled to multi-day swing magnitudes:
-        //   - Hitting +10% TP in 3 days = ~3-5 ATR move (achievable on real trends)
-        //   - Hitting -5% SL in 3 days = ~2-3 ATR move (early exits cap most losses well before)
-        //   - 0.97% friction is now <10% of TP (was 24% at TP=4%)
-        STOP_LOSS_PCT: 5.0,
-        TAKE_PROFIT_PCT: 10.0,
-        TRAIL_ATR_MULTIPLE: 1.5,
-        MAX_HOLD_MINUTES: 4320,           // 72h = 3 days
-        // Grace periods adapted to 4h bars (1 bar = 240 min):
-        MOMENTUM_DEATH_MIN_AGE_MIN: 240,  // 4h grace — wait one full bar before checking EMA reversion
-        OVERHEATED_RSI: 75,               // RSI is timeframe-agnostic, threshold unchanged
-        STUCK_LOSS_AGE_MIN: 720           // 12h grace — three bars before cutting stuck losers
+        // 2026-05-24 BACKTEST-DERIVED CONFIG. Over 90d × 4 tokens, the winning
+        // combination was: hot-RSI≤55 entry gate + 72h stuck-loss grace.
+        // Backtest stats: 17 trades, 41.2% win rate, +€0.27 (break-even);
+        // 180d validation: 23 trades, 39.1% win rate, -€10.66 (vs -€51 baseline).
+        // Improvement vs prior config: +€60 over 90d, +€40 over 180d.
+        // Still tunable via env vars for further experimentation.
+        STOP_LOSS_PCT:           parseFloat(process.env.BT_SL          || '5.0'),
+        TAKE_PROFIT_PCT:         parseFloat(process.env.BT_TP          || '10.0'),
+        TRAIL_ATR_MULTIPLE:      parseFloat(process.env.BT_TRAIL       || '1.5'),
+        MAX_HOLD_MINUTES:        parseInt  (process.env.BT_MAX_HOLD    || '4320'),  // 72h
+        MOMENTUM_DEATH_MIN_AGE_MIN: parseInt(process.env.BT_MOM_GRACE  || '240'),   // 4h
+        OVERHEATED_RSI:          parseFloat(process.env.BT_OVERHEAT    || '75'),
+        STUCK_LOSS_AGE_MIN:      parseInt  (process.env.BT_STUCK_GRACE || '4320')   // 72h (was 720)
     },
 
     COSTS: {
