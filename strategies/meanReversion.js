@@ -2,6 +2,7 @@ const config = require('../config');
 const { TOKENS } = require('../tokens');
 const marketData = require('../marketData');
 const signalEngine = require('../signalEngine');
+const factors = require('../signals/factors');
 
 const NAME = 'MEAN_REVERSION';
 
@@ -25,7 +26,7 @@ function recentDropAtr(history, atr, lookback = 5) {
     return (peak - last) / atr;
 }
 
-function evaluateToken(token) {
+async function evaluateToken(token) {
     const ind = marketData.computeIndicators(token.address);
     if (!ind) return null;
     if (!ind.depthOk) return null;
@@ -53,42 +54,46 @@ function evaluateToken(token) {
     const sharpDrop      = dropAtr > 1.5;
     const belowMean      = price < ind.emaSlow;
 
-    // FIX 1 — RSI turn-up confirmation. rsiMin5 = lowest RSI in last 5 bars
-    // (~20h on 4h klines).  Setup: RSI went below 30 sometime in the last 20h
-    // AND has now risen at least 3 points off that low AND is back above 30 but
-    // not yet past full recovery.  Without this, the strategy buys WHILE still
-    // falling — exactly the failure mode of the last 3 losing trades.
+    // FIX 1 — RSI turn-up confirmation (LOOSENED 2026-05-27, option C).
+    // Original requirements (RSI≥32, climbed ≥3) fired ZERO trades in 90d
+    // because they're too tight against actual market data. Loosened to:
+    //   rsiMin5 < 30 (oversold sometime in last ~20h) — unchanged
+    //   rsi ≥ rsiMin5 + 2 (climbed ≥2 points off the low, was 3)
+    //   rsi ≥ 30 (back above oversold, was 32)
+    //   rsi < 50 — unchanged
+    // Backtest will validate whether the looser entry produces edge.
     const rsiTurnedUp = ind.rsiMin5 !== null
-        && ind.rsiMin5 < 30           // hit oversold within last ~20h
-        && ind.rsi >= ind.rsiMin5 + 3 // RSI has climbed ≥3 points off the low
-        && ind.rsi >= 32              // confirmed back above oversold zone
-        && ind.rsi < 50;              // not already past full recovery
+        && ind.rsiMin5 < 30
+        && ind.rsi >= ind.rsiMin5 + 2
+        && ind.rsi >= 30
+        && ind.rsi < 50;
 
-    // FIX 2 — short-term trend filter. 30-bar (5-day at 4h) slope must NOT be
-    // strongly negative. MR buying a dip in a real downtrend = catching knives.
-    // Original cliffFalling at -15%/10d was way too loose.
+    // FIX 2 — short-term trend filter (LOOSENED 2026-05-27, option C).
+    // Original -3%/5d was too tight — blocked legitimate dip-buying setups
+    // where price has pulled back without a real bearish trend. Relaxed to
+    // -5%/5d which still blocks strong downtrends (deepDip handles those)
+    // while admitting normal pullback-and-bounce setups.
     let shortTrendPct = 0;
     if (histPrices.length >= 30) {
         const old30 = histPrices[histPrices.length - 30];
         shortTrendPct = ((histPrices[histPrices.length - 1] - old30) / old30) * 100;
     }
-    const aggressiveDowntrend = shortTrendPct < -3.0;  // -3% over 5 days
+    const aggressiveDowntrend = shortTrendPct < -5.0;
 
-    // FIX 3 — structural support. We want price near a 7-day low that has been
-    // tested multiple times (= an actual support level), not a fresh low (= the
-    // floor is still being discovered, more downside likely).
-    // 7 days on 4h = 42 bars. Use bar LOWs (not closes) for honest support.
+    // FIX 3 — structural support (LOOSENED 2026-05-27, option C).
+    // Original: price within 2.5% of 7-day low AND ≥3 touches → 0 trades fired.
+    // Loosened to: price within 3% of 7-day low AND ≥2 touches. Still requires
+    // an established support level, just not an aggressively-tested one.
     let nearSupport = false;
     let supportTouches = 0;
     if (histLows.length >= 42) {
         const recent42 = histLows.slice(-42);
         const support = Math.min(...recent42);
         const distFromSupportPct = ((price - support) / support) * 100;
-        nearSupport = distFromSupportPct < 2.5;        // price within 2.5% of the 7-day low
-        // Count bars (across whole 30-day window) that touched within 1.5% of this support
+        nearSupport = distFromSupportPct < 3.0;
         supportTouches = histLows.filter(p => p > 0 && p <= support * 1.015).length;
     }
-    const supportTested = nearSupport && supportTouches >= 3;
+    const supportTested = nearSupport && supportTouches >= 2;
 
     // Hard filters (any fail = no trade)
     if (aggressiveDowntrend) return null;       // FIX 2
@@ -127,16 +132,23 @@ function evaluateToken(token) {
     // Stop wider on 4h: 4h ATR can be 2-4%, so a 1.5% stop would be 1 ATR (whipsaw).
     const stopPct = config.EXITS.STOP_LOSS_PCT * 0.6; // 3% effective stop
 
+    // 2026-05-27 (option B) — fold factor scores into confidence + probWin.
+    // factors.combined is in [-1, 1]: positive = buy pressure (good for MR long).
+    // Decoupling risk is haircut (cross-asset chaos = lower confidence).
+    // In backtest BT_NO_FACTORS=1 returns zeros — strategy degrades to old behavior.
+    const fac = await factors.getFactors(token.binanceSymbol);
+    const factorBoost = Math.max(0, fac.combined); // only count POSITIVE factor signal as a boost
+
     // Win prob: oversold + turn-up + tested support on majors at 4h timeframe.
-    // Higher base (0.55) because we now require 3 confirmations vs 1 before;
-    // signal quality is materially better even though rate-of-fire is lower.
     let probWin = 0.55;
-    if (rsiScore > 0.7) probWin += 0.05;   // RSI was <22 = deep oversold
+    if (rsiScore > 0.7) probWin += 0.05;
     if (meanScore > 0.7) probWin += 0.03;
     if (dropScore > 0.6 && dropScore < 1.0) probWin += 0.03;
     if (distFromMean > 4.0) probWin += 0.04;
-    if (supportTouches >= 5) probWin += 0.04; // strong support → higher confidence
-    probWin = Math.min(0.70, probWin);
+    if (supportTouches >= 5) probWin += 0.04;
+    if (factorBoost > 0.3) probWin += 0.04;   // moderate factor confluence
+    if (factorBoost > 0.6) probWin += 0.03;   // strong factor confluence (additional)
+    probWin = Math.min(0.72, probWin);
 
     const costPct = totalRoundTripCostPct();
     const expectedEdgePct = probWin * targetPct - (1 - probWin) * stopPct - costPct;
@@ -183,13 +195,10 @@ async function evaluate(ctx) {
             .map(p => p.token.toLowerCase())
     );
 
-    const decisions = [];
-    for (const token of TOKENS) {
-        if (openTokens.has(token.address.toLowerCase())) continue;
-        const d = evaluateToken(token);
-        if (d) decisions.push(d);
-    }
-    return decisions;
+    // evaluateToken is async now (fetches factors). Run them in parallel.
+    const candidates = TOKENS.filter(t => !openTokens.has(t.address.toLowerCase()));
+    const results = await Promise.all(candidates.map(t => evaluateToken(t).catch(() => null)));
+    return results.filter(Boolean);
 }
 
 module.exports = {

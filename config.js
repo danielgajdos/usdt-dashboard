@@ -94,6 +94,13 @@ module.exports = {
     STRATEGIES: {
         MOMENTUM: { enabled: true, weight: 1.0 },
         MEAN_REVERSION: { enabled: true, weight: 0.9 },
+        // 2026-05-27 DEEP_DIP (option A from backtest review).  DISABLED
+        // after backtest validation: 8 trades over 180d on SOL+AVAX, 12.5%
+        // win rate, -€39.52 (heavy loser).  The thesis "buy RSI<25
+        // capitulation" produces too many failed-bounce setups when the
+        // bear regime continues. Kept in codebase for possible future
+        // refinement; not used in production for now.
+        DEEP_DIP: { enabled: false, weight: 0.95 },
         // RANGE: disabled at 4h timeframe — its 15-bar lookback (= 60h band) and
         // tight 1.2% stop don't translate to swing trading. Re-enable only with
         // a 4h-specific reimplementation (multi-day support/resistance bands).

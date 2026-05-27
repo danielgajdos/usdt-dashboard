@@ -20,13 +20,20 @@ const marketData = require('./marketData');
 const signalEngine = require('./signalEngine');
 const riskManager = require('./riskManager');
 
+// Disable live factor API calls in backtest — they'd fetch CURRENT data which
+// is meaningless when replaying historical bars.  Strategies that read factors
+// see neutral zeros in this mode.
+process.env.BT_NO_FACTORS = process.env.BT_NO_FACTORS || '1';
+
 // Register strategies (mirrors index.js init order)
 const momentum      = require('./strategies/momentum');
 const meanReversion = require('./strategies/meanReversion');
 const range         = require('./strategies/range');
+const deepDip      = require('./strategies/deepDip');
 signalEngine.register(momentum);
 signalEngine.register(meanReversion);
 signalEngine.register(range);
+signalEngine.register(deepDip);
 
 const args = process.argv.slice(2);
 const arg = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i+1] : d; };
@@ -45,10 +52,11 @@ if (!tokensToTest.length) { console.error('Unknown or untradeable token'); proce
 if (skipSet.size) console.log(`Skipping tokens: ${[...skipSet].join(',')}`);
 
 if (STRATEGY) {
+    const wanted = new Set(STRATEGY.toUpperCase().split(',').filter(Boolean));
     for (const k of Object.keys(config.STRATEGIES)) {
-        config.STRATEGIES[k].enabled = (k === STRATEGY.toUpperCase());
+        config.STRATEGIES[k].enabled = wanted.has(k);
     }
-    console.log(`Strategy filter: only ${STRATEGY.toUpperCase()} enabled`);
+    console.log(`Strategy filter: enabled ${[...wanted].join(',')}`);
 }
 
 // Sentiment gate: use historical BTC+ETH price action from the same backtest data

@@ -13,11 +13,13 @@ const execution = require('./execution');
 const momentumStrategy = require('./strategies/momentum');
 const meanReversionStrategy = require('./strategies/meanReversion');
 const rangeStrategy = require('./strategies/range');
+const deepDipStrategy = require('./strategies/deepDip');
 const newsDrivenStrategy = require('./strategies/newsDriven');
 const stableArbStrategy = require('./strategies/stableArb');
 signalEngine.register(momentumStrategy);
 signalEngine.register(meanReversionStrategy);
 signalEngine.register(rangeStrategy);
+signalEngine.register(deepDipStrategy);
 signalEngine.register(newsDrivenStrategy);
 signalEngine.register(stableArbStrategy);
 

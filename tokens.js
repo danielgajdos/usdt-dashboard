@@ -13,9 +13,17 @@ const BUSD = '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56';
 // Wrapped majors trade in deep PCS V2 pools, mirror their CEX prices via arb,
 // and actually move 0.05-0.15% per minute — momentum has something to grab.
 // CAKE retained as the one BSC-native datapoint with a working V2 pool.
-const TOKENS = [
+// 2026-05-27 backtest-driven token selection. Tokens marked enabled:false
+// were tested and dropped — they're documented here so we don't re-add
+// them by accident.
+//   CAKE: 5-token 180d -€7 worse than 4-token; flat-to-slightly-negative
+//   LINK: 90d -€10 / 180d losses; momentum doesn't work
+//   XRP : 0% win rate over 90d (-€15); different correlation profile, doesn't fit
+//         the breakout-momentum pattern at all
+const ALL_TOKENS = [
     {
         symbol: 'CAKE',
+        enabled: false,  // dropped: ~0% win rate over 90d, marginally negative 180d
         address: '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82',
         decimals: 18,
         minLiquidityUsd: 5_000_000,
@@ -48,8 +56,42 @@ const TOKENS = [
         minLiquidityUsd: 5_000_000,
         allowlisted: true,
         binanceSymbol: 'SOLUSDT'
+    },
+    // 2026-05-27: Added LINK, AVAX, XRP (option D from backtest review).
+    // All Binance-Peg, live on PCS V3, large-cap with active 4h ATR.
+    // Adds tokens with different correlation profiles than ETH/BTC/SOL —
+    // LINK/AVAX track alts more than majors; XRP often moves independently.
+    {
+        symbol: 'LINK',
+        enabled: false,  // dropped: 25% win rate, -€10 over 90d
+        address: '0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD',
+        decimals: 18,
+        minLiquidityUsd: 2_000_000,
+        allowlisted: true,
+        binanceSymbol: 'LINKUSDT'
+    },
+    {
+        symbol: 'AVAX',
+        address: '0x1CE0c2827e2eF14D5C4f29a091d735A204794041',
+        decimals: 18,
+        minLiquidityUsd: 2_000_000,
+        allowlisted: true,
+        binanceSymbol: 'AVAXUSDT'
+    },
+    {
+        symbol: 'XRP',
+        enabled: false,  // dropped: 0% win rate over 90d (-€15); doesn't fit momentum pattern
+        address: '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE',
+        decimals: 18,
+        minLiquidityUsd: 2_000_000,
+        allowlisted: true,
+        binanceSymbol: 'XRPUSDT'
     }
 ];
+
+// Active universe — strategies iterate over TOKENS. Disabled entries are
+// kept in ALL_TOKENS for reference and easy re-enable.
+const TOKENS = ALL_TOKENS.filter(t => t.enabled !== false);
 
 const BY_ADDRESS = Object.fromEntries(
     TOKENS.map(t => [t.address.toLowerCase(), t])

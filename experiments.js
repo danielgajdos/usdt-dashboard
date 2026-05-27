@@ -96,6 +96,28 @@ const EXPERIMENTS = [
       env: { BT_MOM_MAX_RSI: '55', BT_STUCK_GRACE: '4320', BT_OVERHEAT: '80' } },
     { name: 'WINNER+: hot-RSI≤55 + grace=72h + max-hold=120h',
       env: { BT_MOM_MAX_RSI: '55', BT_STUCK_GRACE: '4320', BT_MAX_HOLD: '7200' } },
+
+    // -- ROUND 4: 2026-05-27 — A+B+C+D additions ------------------------
+    { name: 'R4: current+LINK+AVAX+XRP+deepDip+MR-loose',
+      env: {} },
+    { name: 'R4: skip XRP (worst new token)',
+      env: {}, args: ['--skip', 'XRP'] },
+    { name: 'R4: skip CAKE,LINK,XRP (keep only majors+AVAX+SOL)',
+      env: {}, args: ['--skip', 'CAKE,LINK,XRP'] },
+    { name: 'R4: only SOL+AVAX (the winners)',
+      env: {}, args: ['--skip', 'CAKE,ETH,BTCB,LINK,XRP'] },
+    { name: 'R4: skip XRP+LINK (drop net losers)',
+      env: {}, args: ['--skip', 'XRP,LINK'] },
+    { name: 'R4: skip XRP, MOMENTUM only (no MR, no DD)',
+      env: {}, args: ['--skip', 'XRP', '--strategy', 'MOMENTUM'] },
+
+    // -- ROUND 5: DEEP_DIP shown to be net negative — try without it ----
+    { name: 'R5: SOL+AVAX, MOMENTUM+MR only (no DD)',
+      env: {}, args: ['--skip', 'CAKE,ETH,BTCB,LINK,XRP', '--strategy', 'MOMENTUM,MEAN_REVERSION'] },
+    { name: 'R5: skip CAKE,LINK,XRP, MOMENTUM+MR (no DD)',
+      env: {}, args: ['--skip', 'CAKE,LINK,XRP', '--strategy', 'MOMENTUM,MEAN_REVERSION'] },
+    { name: 'R5: skip XRP+LINK, MOMENTUM+MR (no DD)',
+      env: {}, args: ['--skip', 'XRP,LINK', '--strategy', 'MOMENTUM,MEAN_REVERSION'] },
 ];
 
 function runExperiment(exp) {

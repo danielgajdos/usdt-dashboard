@@ -117,7 +117,12 @@ async function btcEthDecoupling() {
 
 // Combined factor bundle — returns a single object with all four signals.
 // Strategies call this once per evaluation and fold values into confidence.
+// In backtest mode (BT_NO_FACTORS=1) all values are 0 — strategies should
+// treat factors as neutral, not as missing.
 async function getFactors(binanceSymbol) {
+    if (process.env.BT_NO_FACTORS === '1' || !binanceSymbol) {
+        return { volumeBias: 0, fundingSignal: 0, orderBookImbalance: 0, decouplingRisk: 0, combined: 0 };
+    }
     const [vol, fund, obi, decouple] = await Promise.all([
         volumeBias(binanceSymbol),
         fundingRateSignal(binanceSymbol),
