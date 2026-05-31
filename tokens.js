@@ -99,12 +99,50 @@ const ALL_TOKENS = [
         minLiquidityUsd: 1_000_000,
         allowlisted: true,
         binanceSymbol: 'FILUSDT'
+    },
+    // 2026-05-31 — market-wide screen of top 120 Binance pairs by volume.
+    // These 3 passed: positive MOMENTUM edge on BOTH 90d & 180d windows AND
+    // have real PancakeSwap liquidity AND on-chain price matches CEX (verified
+    // not lookalike/scam). The depth-scaled sizer handles their varying depth.
+    {
+        // ChainGPT — BSC-native, DEEP V3 pool (0.15% impact at €150).
+        // Backtest +€19/180d (56% win), +€1.5/90d. Full-size deployable.
+        symbol: 'CGPT',
+        address: '0x9840652DC04fb9db2C43853633f0F62BE6f00f98',
+        decimals: 18,
+        minLiquidityUsd: 1_000_000,
+        allowlisted: true,
+        binanceSymbol: 'CGPTUSDT'
+    },
+    {
+        // PEPE (BSC) — DEEP V3 pool (0.51% impact). On-chain symbol+price verified.
+        // Backtest +€20/180d (56% win), +€4/90d. Full-size deployable.
+        symbol: 'PEPE',
+        address: '0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00',
+        decimals: 18,
+        minLiquidityUsd: 1_000_000,
+        allowlisted: true,
+        binanceSymbol: 'PEPEUSDT'
+    },
+    {
+        // Stargate Finance — V3 pool thinner (2.49% impact at €150) so the
+        // depth-scaled sizer auto-tapers to ~€30. Backtest at that size:
+        // +€14.5/180d (50% win), +€4/90d. At full €150 it LOSES (-€23) —
+        // proof the sizer is doing its job.
+        symbol: 'STG',
+        address: '0xB0D502E938ed5f4df2E681fE6E419ff29631d62b',
+        decimals: 18,
+        minLiquidityUsd: 500_000,
+        allowlisted: true,
+        binanceSymbol: 'STGUSDT'
     }
     // Researched and REJECTED (kept out, documented so we don't revisit):
     //   INJ  — backtest €0/180d, goes negative at real 1.17% slippage
     //   APT  — no Binance-Peg BSC pool (Aptos not bridged); untradeable
     //   ATOM — V2 pool too thin (5.2% impact at €150)
-    //   DOT/ADA/LTC/NEAR — tradeable but negative backtest edge
+    //   DOT/ADA/LTC/NEAR/XRP — tradeable but negative backtest edge
+    //   IO/PENGU/DYDX/TAO/HYPER/NIL/AI — strong backtest BUT no PancakeSwap BSC
+    //     liquidity (Solana/Cosmos/own-chain natives); untradeable by this bot
 ];
 
 // Active universe — strategies iterate over TOKENS. Disabled entries are

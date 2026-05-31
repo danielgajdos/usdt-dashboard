@@ -51,7 +51,12 @@ module.exports = {
         // dilute the $0.20 round-trip gas (was 2.3% of trade at €25, now 0.27%).
         // Math at TP=4%/SL=2.5% goes from break-even at 47% win-rate to 36%.
         MAX_POSITION_EUR: 150,
-        MIN_POSITION_EUR: 50,             // no point trading €25 at €600 bankroll
+        // 2026-05-31: lowered 50 → 25 so the depth-scaled sizer can actually
+        // execute thin-pool tokens. FIL/STG taper to ~€30 (where their slippage
+        // is tolerable); at the old €50 floor canOpen would reject them and they'd
+        // never trade — silently defeating depth-aware sizing. €25 floor still
+        // rejects pools so thin they'd need <€25 (correct — untradeable).
+        MIN_POSITION_EUR: 25,
         MAX_CONCURRENT_POSITIONS: 3,
         MAX_EXPOSURE_PCT: 75,             // 3 × €150 = €450 deployed max, €150 reserve
         MAX_SINGLE_TOKEN_EXPOSURE_PCT: 25, // €150 single-token cap = exactly MAX_POSITION
