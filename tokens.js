@@ -86,7 +86,25 @@ const ALL_TOKENS = [
         minLiquidityUsd: 2_000_000,
         allowlisted: true,
         binanceSymbol: 'XRPUSDT'
+    },
+    {
+        // 2026-05-31 — Binance-Peg Filecoin. Backtest standout: +€31/180d (67% win),
+        // +€24/90d (75%). The only researched candidate whose momentum edge survives
+        // realistic slippage (+€9.9/180d even at 1.2%). Trades on PCS V2 (~2.4% impact
+        // at €150) so the depth-scaled sizer auto-shrinks its position to keep
+        // slippage in check. Verified on-chain depth OK (V2 pool live).
+        symbol: 'FIL',
+        address: '0x0D8Ce2A99Bb6e3B7Db580eD848240e4a0F9aE153',
+        decimals: 18,
+        minLiquidityUsd: 1_000_000,
+        allowlisted: true,
+        binanceSymbol: 'FILUSDT'
     }
+    // Researched and REJECTED (kept out, documented so we don't revisit):
+    //   INJ  — backtest €0/180d, goes negative at real 1.17% slippage
+    //   APT  — no Binance-Peg BSC pool (Aptos not bridged); untradeable
+    //   ATOM — V2 pool too thin (5.2% impact at €150)
+    //   DOT/ADA/LTC/NEAR — tradeable but negative backtest edge
 ];
 
 // Active universe — strategies iterate over TOKENS. Disabled entries are

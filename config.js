@@ -88,7 +88,13 @@ module.exports = {
         SWAP_FEE_PCT: 0.25,               // PCS V2 LP fee per leg
         EXPECTED_SLIPPAGE_PCT: 0.10,      // expected slippage for deep-pool tokens at €25 (used in edge calc)
         SLIPPAGE_BUFFER_PCT: 1.0,         // max-slippage tolerance for tx (amountOutMin guard)
-        LIVE_SLIPPAGE_TOLERANCE_PCT: 1.0  // amountOutMin = quote * (100 - this) / 100
+        LIVE_SLIPPAGE_TOLERANCE_PCT: 1.0, // amountOutMin = quote * (100 - this) / 100
+        // 2026-05-31 — depth-aware sizing. Backtest proved edge dies above ~0.6%
+        // slippage. The depth check in marketData measures live price-impact at
+        // a probe size; we taper position size to keep impact ≤ TARGET, and hard
+        // reject entries that can't get under MAX even at MIN_POSITION_EUR.
+        TARGET_ENTRY_SLIPPAGE_PCT: 0.5,   // sizer aims to keep impact at/below this
+        MAX_ENTRY_SLIPPAGE_PCT: 0.8       // hard reject above this (backstop)
     },
 
     STRATEGIES: {

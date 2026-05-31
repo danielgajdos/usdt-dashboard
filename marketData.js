@@ -1,5 +1,6 @@
 const https = require('https');
 const { ethers } = require('ethers');
+const config = require('./config');
 const { quote, sellPath, bestQuote } = require('./dexRegistry');
 const { WBNB, USDT, BY_ADDRESS } = require('./tokens');
 
@@ -8,6 +9,19 @@ const { WBNB, USDT, BY_ADDRESS } = require('./tokens');
 const TOKEN_VENUE = new Map();
 function getVenue(tokenAddress) {
     return TOKEN_VENUE.get(tokenAddress.toLowerCase()) || null;
+}
+
+// Per-token measured depth deviation (price impact of the probe-size buy vs
+// spot, as a fraction). Populated by fetchOnChainPrice. Read by riskManager
+// (depth-scaled sizing) and index.js (slippage entry gate).
+// Map<tokenAddrLower, { deviation, notionalUsd, ts }>.
+const TOKEN_DEPTH = new Map();
+function getDepthDeviation(tokenAddress) {
+    const e = TOKEN_DEPTH.get(tokenAddress.toLowerCase());
+    return e ? e.deviation : null;   // fraction (0.024 = 2.4%), or null if unmeasured
+}
+function getDepthInfo(tokenAddress) {
+    return TOKEN_DEPTH.get(tokenAddress.toLowerCase()) || null;
 }
 
 // Price history ring buffer per token, plus indicator calculators.
@@ -103,27 +117,32 @@ async function fetchOnChainPrice(provider, tokenAddress, decimals) {
         if (!sellBest) return null;
         const price = parseFloat(ethers.formatUnits(sellBest.amountOut, 18));
 
-        // Buy quote: $QUOTE_NOTIONAL_USD → token (same direction as a real entry)
-        const notional = ethers.parseUnits(String(QUOTE_NOTIONAL_USD), 18);
+        // Buy quote at the REAL max position size (not a token $25 probe), so the
+        // measured price-impact reflects what a full-size entry would actually pay.
+        // The depth-scaled sizer in riskManager reads this to taper down on thin pools.
+        const probeUsd = config.RISK.MAX_POSITION_EUR || QUOTE_NOTIONAL_USD;
+        const notional = ethers.parseUnits(String(probeUsd), 18);
         const buyBest = await bestQuote(provider, USDT, tokenAddress, notional);
         let depthOk = true;
+        let deviation = 0;
         let executionVenue = sellBest.venue;
         let executionFee = sellBest.fee || null;
 
         if (buyBest && buyBest.amountOut > 0n) {
             const tokensGot = parseFloat(ethers.formatUnits(buyBest.amountOut, decimals));
-            const effectivePrice = QUOTE_NOTIONAL_USD / tokensGot;
-            const deviation = Math.abs(effectivePrice - price) / price;
+            const effectivePrice = probeUsd / tokensGot;
+            deviation = Math.abs(effectivePrice - price) / price;
             depthOk = deviation < 0.03;
             // Prefer the buy venue for execution since we open positions buy-first
             executionVenue = buyBest.venue;
             executionFee = buyBest.fee || null;
         }
 
-        // Cache venue+fee for execution.js to use on the actual swap.
+        // Cache venue+fee for execution.js, and depth deviation for the sizer/gate.
         TOKEN_VENUE.set(tokenAddress.toLowerCase(), { venue: executionVenue, fee: executionFee });
+        TOKEN_DEPTH.set(tokenAddress.toLowerCase(), { deviation, notionalUsd: probeUsd, ts: Date.now() });
 
-        return { price, depthOk, venue: executionVenue, fee: executionFee };
+        return { price, depthOk, deviation, venue: executionVenue, fee: executionFee };
     } catch {
         return null;
     }
@@ -385,6 +404,8 @@ module.exports = {
     getLastPrice,
     computeIndicators,
     getVenue,            // execution.js looks this up to route V2 vs V3
+    getDepthDeviation,   // riskManager + index.js: depth-aware sizing/gating
+    getDepthInfo,
     ema,
     rsi,
     atr,

@@ -357,7 +357,10 @@ async function processEntries(provider, signer) {
     // same token in one tick (which orphans the second record on exit).
     let livePort = port;
     for (const decision of decisions) {
-        decision.sizeEur = riskManager.sizePosition(decision.score, livePort.cashBalance);
+        // Depth-aware sizing: taper down on thin pools so projected slippage
+        // stays under target (backtest proved edge dies above ~0.6% slippage).
+        const depthDev = marketData.getDepthDeviation(decision.token);
+        decision.sizeEur = riskManager.sizePosition(decision.score, livePort.cashBalance, depthDev);
 
         const gate = signalEngine.passesGate(decision, null);
         if (!gate.ok) {
@@ -367,6 +370,15 @@ async function processEntries(provider, signer) {
                 log(`[${decision.strategy}] ${decision.symbol} gate block (score=${decision.score}): ${gate.reason}`, 'info');
             }
             decisionLog.logGateBlock(decision, gate.reason);
+            continue;
+        }
+
+        // Hard slippage backstop: even after the taper, if projected impact at the
+        // chosen size exceeds MAX, refuse the trade (thin pool can't be traded safely).
+        const slip = riskManager.passesSlippageGate(decision.sizeEur, depthDev);
+        if (!slip.ok) {
+            log(`[${decision.strategy}] ${decision.symbol} slippage block: projected ${slip.projectedPct.toFixed(2)}% > max ${config.COSTS.MAX_ENTRY_SLIPPAGE_PCT}% (size €${decision.sizeEur.toFixed(0)}, pool dev ${(depthDev*100).toFixed(2)}%)`, 'info');
+            decisionLog.logGateBlock(decision, `slippage ${slip.projectedPct.toFixed(2)}% > max`);
             continue;
         }
 

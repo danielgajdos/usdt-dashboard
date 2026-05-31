@@ -111,8 +111,12 @@ function makePortfolio(initialCashEur) {
 }
 
 // --- Realistic cost model — matches live execution ---
+// --slippage X overrides the per-side slippage % (default from config 0.10).
+// Use it to validate thin-pool tokens (e.g. FIL) at honest friction.
 const SWAP_FEE = config.COSTS.SWAP_FEE_PCT / 100;
-const SLIP     = config.COSTS.EXPECTED_SLIPPAGE_PCT / 100;
+const SLIP     = (arg('slippage', null) !== null
+    ? parseFloat(arg('slippage', '0.1'))
+    : config.COSTS.EXPECTED_SLIPPAGE_PCT) / 100;
 const GAS_USD  = config.COSTS.GAS_PER_TX_USD;
 
 function simBuy(price, sizeEur) {

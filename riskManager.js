@@ -19,15 +19,43 @@ function _cap() {
         : config.RISK.MAX_POSITION_EUR;
 }
 
-// Compute recommended position size for a decision, Kelly-lite.
-// cash is current available EUR (portfolio.cashBalance).
-function sizePosition(score, cash) {
+// Compute recommended position size for a decision, Kelly-lite, then taper for
+// pool depth.  `depthDeviation` is the measured price-impact (fraction) of a
+// probe buy at MAX_POSITION_EUR notional (from marketData.getDepthDeviation).
+// Backtest proved edge dies above ~0.6% slippage, so we shrink size on thin
+// pools to keep projected impact ≤ TARGET_ENTRY_SLIPPAGE_PCT.
+//
+//   impact scales ~linearly with size for an AMM: impact(S) ≈ deviation × S/probe.
+//   To hold impact ≤ target:  S ≤ probe × target / deviation.
+function sizePosition(score, cash, depthDeviation = null) {
     const confMult = 0.5 + score / 100; // 0.5 at score=0, 1.5 at score=100
     const base = cash * (config.RISK.BASE_RISK_PCT / 100);
     let size = base * confMult;
     size = Math.min(size, _cap());
+
+    // Depth-scaled taper: deviation was measured at the MAX_POSITION_EUR probe.
+    if (depthDeviation != null && depthDeviation > 0) {
+        const probe = config.RISK.MAX_POSITION_EUR;
+        const targetFrac = config.COSTS.TARGET_ENTRY_SLIPPAGE_PCT / 100;
+        if (depthDeviation > targetFrac) {
+            const slippageCappedSize = probe * (targetFrac / depthDeviation);
+            size = Math.min(size, slippageCappedSize);
+        }
+    }
+
     size = Math.max(size, 0);
     return size;
+}
+
+// Would a position of `sizeEur` exceed the hard slippage ceiling, given the
+// pool's measured depth deviation (at MAX_POSITION_EUR probe)?  Linear scaling.
+// Returns { ok, projectedPct } — projectedPct is the estimated impact at this size.
+function passesSlippageGate(sizeEur, depthDeviation) {
+    if (depthDeviation == null) return { ok: true, projectedPct: null }; // unmeasured → don't block
+    const probe = config.RISK.MAX_POSITION_EUR;
+    const projected = depthDeviation * (sizeEur / probe);      // fraction
+    const projectedPct = projected * 100;
+    return { ok: projectedPct <= config.COSTS.MAX_ENTRY_SLIPPAGE_PCT, projectedPct };
 }
 
 // Update daily equity reference at start of each UTC day.
@@ -249,6 +277,7 @@ function resetState() {
 
 module.exports = {
     sizePosition,
+    passesSlippageGate,
     canOpen,
     shouldExit,
     recordLoss,
