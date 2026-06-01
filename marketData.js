@@ -24,6 +24,22 @@ function getDepthInfo(tokenAddress) {
     return TOKEN_DEPTH.get(tokenAddress.toLowerCase()) || null;
 }
 
+// Price-only token registry — for the Binance Futures shadow venue. These tokens
+// have a Binance kline feed but no BSC pool, so they get prices via the kline
+// path and skip the on-chain depth check entirely (Binance has liquidity).
+// Map<addrLower, { binanceSymbol, decimals }>.
+const EXTRA_PRICE_TOKENS = new Map();
+function registerPriceToken(address, binanceSymbol, decimals = 18) {
+    EXTRA_PRICE_TOKENS.set(address.toLowerCase(), { binanceSymbol, decimals });
+}
+function _binanceSymbolFor(key) {
+    const t = BY_ADDRESS[key];
+    if (t && t.binanceSymbol) return { binanceSymbol: t.binanceSymbol, priceOnly: false };
+    const e = EXTRA_PRICE_TOKENS.get(key);
+    if (e) return { binanceSymbol: e.binanceSymbol, priceOnly: true };
+    return { binanceSymbol: null, priceOnly: false };
+}
+
 // Price history ring buffer per token, plus indicator calculators.
 //
 // Price source strategy (in order of preference):
@@ -154,10 +170,11 @@ async function fetchOnChainPrice(provider, tokenAddress, decimals) {
 async function refreshPrice(provider, tokenAddress, decimals = 18) {
     const key = tokenAddress.toLowerCase();
     const s = _init(tokenAddress);
-    const token = BY_ADDRESS[key];
-    const binanceSymbol = token ? token.binanceSymbol : null;
+    const { binanceSymbol, priceOnly } = _binanceSymbolFor(key);
 
-    let depthOk = s.lastDepthOk; // inherit last known depth until next check
+    // Price-only (futures-venue) tokens: Binance has deep liquidity, no on-chain
+    // pool to check — always depthOk so the strategy gate doesn't reject them.
+    let depthOk = priceOnly ? true : s.lastDepthOk;
 
     if (binanceSymbol) {
         // First call: backfill the buffer with BUFFER_SIZE recent closed klines so
@@ -190,8 +207,9 @@ async function refreshPrice(provider, tokenAddress, decimals = 18) {
         }
 
         // Periodic on-chain depth check (gated independently of price fetches).
+        // Skipped for price-only futures tokens (no BSC pool to probe).
         s.depthCheckCount++;
-        if (s.depthCheckCount % DEPTH_CHECK_INTERVAL === 1) {
+        if (!priceOnly && s.depthCheckCount % DEPTH_CHECK_INTERVAL === 1) {
             const onChain = await fetchOnChainPrice(provider, tokenAddress, decimals);
             if (onChain !== null) {
                 s.lastDepthOk = onChain.depthOk;
@@ -406,6 +424,7 @@ module.exports = {
     getVenue,            // execution.js looks this up to route V2 vs V3
     getDepthDeviation,   // riskManager + index.js: depth-aware sizing/gating
     getDepthInfo,
+    registerPriceToken,  // futures shadow venue: price-only Binance tokens
     ema,
     rsi,
     atr,

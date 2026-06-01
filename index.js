@@ -33,6 +33,7 @@ const whaleCluster = require('./signals/whaleCluster');
 //   decisionLog: persistent ledger + adaptive strategy weighting
 const sentiment = require('./signals/sentiment');
 const decisionLog = require('./decisionLog');
+const futures = require('./futures');   // Binance Futures shadow venue
 
 // Apply adaptive strategy weights from past performance at startup.
 // Reads decision log, computes per-strategy PF, scales config.STRATEGIES[X].weight.
@@ -133,6 +134,24 @@ async function startBot() {
     // Set initial portfolio state for riskManager daily-reset
     const initialEquity = portfolio.getPortfolio().totalValue;
     riskManager.rollDay(initialEquity);
+
+    // Binance Futures SHADOW venue — runs the same momentum strategy on tokens
+    // unreachable on BSC (IO, TAO, DYDX, APT, PENGU). Paper-only, tracked
+    // separately. Ticks alongside the main loop but acts only a few times/day.
+    try {
+        await futures.init(log);
+        let futTickInFlight = false;
+        setInterval(async () => {
+            if (futTickInFlight) return;
+            futTickInFlight = true;
+            try { await futures.tick(); botState.futures = futures.getState(); }
+            catch (err) { log(`[futures] tick error: ${err.message}`, 'error'); }
+            finally { futTickInFlight = false; }
+        }, config.TICK_INTERVAL_MS);
+        botState.futures = futures.getState(); // initial snapshot for the dashboard
+    } catch (err) {
+        log(`[futures] init failed (continuing DEX-only): ${err.message}`, 'warning');
+    }
 
     // Main tick — runs every TICK_INTERVAL_MS.
     // A tick-in-flight guard prevents overlapping invocations: when an entry is

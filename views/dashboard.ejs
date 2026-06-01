@@ -150,10 +150,55 @@
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <!-- Open Positions List (Moved out) -->
             <div class="col-span-1 md:col-span-4 bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
-                <h3 class="text-sm text-gray-400 mb-2">🟢 Active Positions (Open)</h3>
+                <h3 class="text-sm text-gray-400 mb-2">🟢 Active Positions (Open) — DEX / On-chain</h3>
                 <div id="pf-positions" class="text-xs font-mono text-gray-500">
                     Waiting for trade signals...
                 </div>
+            </div>
+        </div>
+
+        <!-- ============ BINANCE FUTURES (SHADOW) — separate venue ============ -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8 border border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.12)]">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg font-bold text-indigo-300 flex items-center gap-2">
+                    🔮 Binance Futures <span class="text-[10px] uppercase bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">SHADOW / paper</span>
+                </h2>
+                <span class="text-[11px] text-gray-500">long-only momentum on BSC-unreachable tokens · 1× · real funding</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
+                    <div class="text-gray-500 text-[10px] uppercase">Paper Equity</div>
+                    <div id="fut-equity" class="text-lg font-bold text-indigo-300">—</div>
+                </div>
+                <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
+                    <div class="text-gray-500 text-[10px] uppercase">Return</div>
+                    <div id="fut-return" class="text-lg font-bold text-gray-300">—</div>
+                </div>
+                <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
+                    <div class="text-gray-500 text-[10px] uppercase">Realized PnL</div>
+                    <div id="fut-realized" class="text-lg font-bold text-gray-300">—</div>
+                </div>
+                <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
+                    <div class="text-gray-500 text-[10px] uppercase">Open / Closed</div>
+                    <div id="fut-counts" class="text-lg font-bold text-gray-300">—</div>
+                </div>
+                <div class="bg-gray-900 p-3 rounded-lg border border-gray-800">
+                    <div class="text-gray-500 text-[10px] uppercase">Universe</div>
+                    <div id="fut-universe" class="text-xs font-mono text-gray-400 mt-1">—</div>
+                </div>
+            </div>
+            <h3 class="text-xs text-gray-400 mb-1">Open paper positions</h3>
+            <div id="fut-positions" class="text-xs font-mono text-gray-500 mb-4">No open paper positions.</div>
+            <h3 class="text-xs text-gray-400 mb-1">Recent paper trades</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="text-gray-500 uppercase font-mono border-b border-gray-700">
+                        <tr><th class="p-1">Exit</th><th class="p-1">Token</th><th class="p-1">Entry→Exit</th><th class="p-1">Held</th><th class="p-1">PnL</th><th class="p-1">Reason</th></tr>
+                    </thead>
+                    <tbody id="fut-history" class="font-mono text-gray-300">
+                        <tr><td colspan="6" class="p-2 text-center text-gray-600 italic">No paper trades yet.</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -474,6 +519,54 @@
                     equityChart.update();
                     chartData = labels;
                 }
+            }
+        }
+
+        // 2b. Binance Futures (shadow) section
+        if (state.futures) {
+            const f = state.futures;
+            const fmtP = (v) => (v != null && !isNaN(v)) ? (v < 0.01 ? v.toPrecision(4) : v.toFixed(4)) : '—';
+            document.getElementById('fut-equity').innerText = '€' + f.equity.toFixed(2);
+            const retEl = document.getElementById('fut-return');
+            retEl.innerText = (f.totalReturnPct >= 0 ? '+' : '') + f.totalReturnPct.toFixed(2) + '%';
+            retEl.className = 'text-lg font-bold ' + (f.totalReturnPct >= 0 ? 'text-emerald-400' : 'text-red-400');
+            const realEl = document.getElementById('fut-realized');
+            realEl.innerText = (f.realizedPnl >= 0 ? '+' : '') + '€' + f.realizedPnl.toFixed(2);
+            realEl.className = 'text-lg font-bold ' + (f.realizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400');
+            document.getElementById('fut-counts').innerText = f.positions.length + ' / ' + (f.history ? f.history.length : 0);
+            document.getElementById('fut-universe').innerText = (f.tokens || []).join(' ');
+
+            const fp = document.getElementById('fut-positions');
+            if (f.positions.length > 0) {
+                fp.innerHTML = f.positions.map(p => {
+                    const pc = p.pnlPct != null ? (p.pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-gray-500';
+                    const sign = p.pnlPct != null && p.pnlPct >= 0 ? '+' : '';
+                    return `<div class="flex justify-between items-center py-1.5 border-b border-gray-700/50 px-2">
+                        <div><span class="text-indigo-300 font-bold">${p.symbol}</span>
+                          <span class="text-gray-500 ml-2">entry $${fmtP(p.entryPrice)} → $${fmtP(p.currentPrice)}</span>
+                          <span class="text-gray-600 ml-2">score ${p.decisionScore ?? '?'}</span></div>
+                        <div class="text-right ${pc} font-bold">${p.pnlPct != null ? sign + p.pnlPct.toFixed(2) + '% (' + sign + '€' + p.pnlEur.toFixed(2) + ')' : '—'}</div>
+                    </div>`;
+                }).join('');
+            } else {
+                fp.innerHTML = '<span class="text-gray-600 italic">No open paper positions — waiting for momentum signals.</span>';
+            }
+
+            const fh = document.getElementById('fut-history');
+            if (f.history && f.history.length > 0) {
+                fh.innerHTML = f.history.map(h => {
+                    const d = new Date(h.exitTime);
+                    const ts = String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'. '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+                    const pc = h.pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+                    return `<tr class="border-b border-gray-700/40">
+                        <td class="p-1 text-gray-500 whitespace-nowrap">${ts}</td>
+                        <td class="p-1 text-indigo-300 font-bold">${h.symbol}</td>
+                        <td class="p-1 text-gray-400">$${fmtP(h.entryPrice)}→$${fmtP(h.exitPrice)}</td>
+                        <td class="p-1 text-gray-500">${h.heldHours}h</td>
+                        <td class="p-1 ${pc} font-bold tabular-nums">${h.pnl>=0?'+':''}€${h.pnl.toFixed(2)} <span class="text-gray-600">(${h.pnlPercent.toFixed(1)}%)</span></td>
+                        <td class="p-1 text-gray-500">${h.reason}</td>
+                    </tr>`;
+                }).join('');
             }
         }
 
