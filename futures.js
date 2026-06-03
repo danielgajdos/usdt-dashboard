@@ -111,6 +111,9 @@ async function tick() {
         for (const t of FUTURES_TOKENS) {
             if (state.positions.length >= MAX_CONCURRENT) break;
             if (state.positions.find(p => p.address === t.address)) continue;
+            // Post-loss cooldown — matches the DEX bot (24h). Reuses riskManager's
+            // cooldown map; futures synthetic addresses don't collide with DEX tokens.
+            if (riskManager.onCooldown(t.address)) continue;
             const token = { address: t.address, symbol: t.symbol, binanceSymbol: t.binanceSymbol };
             let decision;
             try { decision = momentum.evaluateToken(token); } catch { decision = null; }
@@ -178,6 +181,8 @@ async function _closePaper(pos, price, reason) {
     const pnl = exitValue - pos.initialInvestment;
     state.cash += exitValue;
     state.realizedPnl += pnl;
+    // Arm the post-loss cooldown so we don't immediately re-enter a losing token.
+    if (pnl <= 0) riskManager.recordLoss(pos.address);
     state.history.unshift({
         symbol: pos.symbol, strategy: 'MOMENTUM',
         entryTime: pos.timestamp, exitTime: new Date().toISOString(),
