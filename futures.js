@@ -15,6 +15,7 @@ const config = require('./config');
 const marketData = require('./marketData');
 const momentum = require('./strategies/momentum');
 const riskManager = require('./riskManager');
+const sentiment = require('./signals/sentiment');
 const { FUTURES_TOKENS } = require('./futuresTokens');
 
 const STATE_PATH = process.env.FUTURES_STATE_PATH || '/app/data/futuresPortfolio.json';
@@ -106,8 +107,19 @@ async function tick() {
         state.positions.splice(i, 1);
     }
 
-    // 3. Entries — long-only momentum, same gate as the DEX bot
-    if (state.positions.length < MAX_CONCURRENT) {
+    // 3. Entries — long-only momentum, SAME gates as the DEX bot.
+    // Macro sentiment gate: don't go long anything while BTC+ETH are dumping.
+    // The 2026-06 crash proved this matters — without it the venue went 0/3
+    // buying bull-trap breakouts into a downtrend (-€18.56), while the DEX bot
+    // (which has this gate) stayed flat. Apply it here for parity + protection.
+    let macroBlocked = false;
+    try {
+        const bias = await sentiment.getMarketBias();
+        macroBlocked = bias.verdict === 'bearish' && bias.confidence >= 0.4;
+        if (macroBlocked) state._lastMacroBlock = { ts: Date.now(), btc24h: bias.details?.btc24h, eth24h: bias.details?.eth24h };
+    } catch {}
+
+    if (!macroBlocked && state.positions.length < MAX_CONCURRENT) {
         for (const t of FUTURES_TOKENS) {
             if (state.positions.length >= MAX_CONCURRENT) break;
             if (state.positions.find(p => p.address === t.address)) continue;
