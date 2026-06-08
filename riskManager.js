@@ -186,19 +186,40 @@ function shouldExit(position, currentPrice, indicators) {
         return { shouldExit: true, reason: `SL hit (${pnlPct.toFixed(2)}%)` };
     }
 
-    // 2. Take-profit — full close (no partial; at 4% TP the gross profit barely covers
-    // round-trip costs, so leaving 50% on a trailing stop usually loses the win).
-    if (pnlPct >= config.EXITS.TAKE_PROFIT_PCT) {
-        return { shouldExit: true, reason: `TP hit (${pnlPct.toFixed(2)}%)` };
-    }
+    // Track the high-water mark (self-contained so BOTH the DEX bot and the
+    // futures shadow venue get trailing without extra wiring).
+    if (currentPrice > (position.highWaterMark || 0)) position.highWaterMark = currentPrice;
 
-    // 3. Overheated-RSI exit — if profitable AND RSI tags overbought, take the win
-    // before mean reversion eats it.  Specific to MOMENTUM/breakout entries that
-    // tend to fade from RSI>75.
-    if (indicators && indicators.rsi != null
-        && pnlPct > 0.5
-        && indicators.rsi >= config.EXITS.OVERHEATED_RSI) {
-        return { shouldExit: true, reason: `overheated (RSI ${indicators.rsi.toFixed(0)}, ${pnlPct.toFixed(2)}%)` };
+    // 2. Profit exit — strategy-aware.
+    if (position.strategy === 'MOMENTUM') {
+        // ATR-trailing: let the rare big winners run (they pay for the losers).
+        // Safety cap banks a runaway; otherwise trail K×ATR below the HWM once
+        // we're past the activation threshold. Below activation: no cap, let it go.
+        if (pnlPct >= config.EXITS.TRAIL_SAFETY_TP_PCT) {
+            return { shouldExit: true, reason: `TP cap (${pnlPct.toFixed(2)}%)` };
+        }
+        if (currentAtr && position.highWaterMark) {
+            const hwmProfitPct = ((position.highWaterMark - position.entryPrice) / position.entryPrice) * 100;
+            if (hwmProfitPct >= config.EXITS.TRAIL_ACTIVATE_PCT) {
+                const trailLevel = position.highWaterMark - config.EXITS.TRAIL_ATR_MULT * currentAtr;
+                if (currentPrice < trailLevel) {
+                    return { shouldExit: true, reason: `trail stop (peak +${hwmProfitPct.toFixed(1)}%, now ${pnlPct.toFixed(2)}%)` };
+                }
+            }
+        }
+    } else {
+        // Non-momentum (MEAN_REVERSION etc.) — fixed TP; reversion has a defined
+        // target and no fat tail to chase.
+        if (pnlPct >= config.EXITS.TAKE_PROFIT_PCT) {
+            return { shouldExit: true, reason: `TP hit (${pnlPct.toFixed(2)}%)` };
+        }
+        // Overheated-RSI exit — take the win before mean reversion eats it.
+        // (Removed for MOMENTUM: trailing supersedes it and it was cutting runners early.)
+        if (indicators && indicators.rsi != null
+            && pnlPct > 0.5
+            && indicators.rsi >= config.EXITS.OVERHEATED_RSI) {
+            return { shouldExit: true, reason: `overheated (RSI ${indicators.rsi.toFixed(0)}, ${pnlPct.toFixed(2)}%)` };
+        }
     }
 
     // 4. Momentum-death exit — only for MOMENTUM entries (mean-reversion trades

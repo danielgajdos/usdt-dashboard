@@ -78,12 +78,20 @@ module.exports = {
         // Improvement vs prior config: +€60 over 90d, +€40 over 180d.
         // Still tunable via env vars for further experimentation.
         STOP_LOSS_PCT:           parseFloat(process.env.BT_SL          || '5.0'),
-        TAKE_PROFIT_PCT:         parseFloat(process.env.BT_TP          || '10.0'),
+        TAKE_PROFIT_PCT:         parseFloat(process.env.BT_TP          || '10.0'),  // MR target; momentum now trails
         TRAIL_ATR_MULTIPLE:      parseFloat(process.env.BT_TRAIL       || '1.5'),
         MAX_HOLD_MINUTES:        parseInt  (process.env.BT_MAX_HOLD    || '4320'),  // 72h
         MOMENTUM_DEATH_MIN_AGE_MIN: parseInt(process.env.BT_MOM_GRACE  || '240'),   // 4h
         OVERHEATED_RSI:          parseFloat(process.env.BT_OVERHEAT    || '75'),
-        STUCK_LOSS_AGE_MIN:      parseInt  (process.env.BT_STUCK_GRACE || '4320')   // 72h (was 720)
+        STUCK_LOSS_AGE_MIN:      parseInt  (process.env.BT_STUCK_GRACE || '4320'),  // 72h (was 720)
+        // 2026-06 ATR-trailing exit for MOMENTUM (backtest: +13% vs fixed TP,
+        // higher win rate). Fixed TP caps the rare big winners that pay for the
+        // losers; trailing lets them run. After +TRAIL_ACTIVATE_PCT profit, trail
+        // a stop TRAIL_ATR_MULT×ATR below the high-water mark. No fixed cap except
+        // a runaway safety. MR keeps its fixed TP (reversion has a defined target).
+        TRAIL_ACTIVATE_PCT:      parseFloat(process.env.BT_TRAIL_ACT   || '6.0'),
+        TRAIL_ATR_MULT:          parseFloat(process.env.BT_TRAIL_K     || '3.0'),
+        TRAIL_SAFETY_TP_PCT:     parseFloat(process.env.BT_TRAIL_CAP   || '30.0')   // bank a runaway winner
     },
 
     COSTS: {
