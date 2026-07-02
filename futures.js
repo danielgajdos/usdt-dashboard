@@ -195,12 +195,16 @@ async function _closePaper(pos, price, reason) {
     state.realizedPnl += pnl;
     // Arm the post-loss cooldown so we don't immediately re-enter a losing token.
     if (pnl <= 0) riskManager.recordLoss(pos.address);
+    const mfePct = (pos.highWaterMark && pos.entryPrice)
+        ? ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100 : null;
+    const maePct = (pos.lowWaterMark && pos.entryPrice)
+        ? ((pos.lowWaterMark - pos.entryPrice) / pos.entryPrice) * 100 : null;
     state.history.unshift({
         symbol: pos.symbol, strategy: 'MOMENTUM',
         entryTime: pos.timestamp, exitTime: new Date().toISOString(),
         entryPrice: pos.entryPrice, exitPrice: price,
         investment: pos.initialInvestment, exitValue,
-        pnl, pnlPercent: netRet * 100, reason,
+        pnl, pnlPercent: netRet * 100, mfePct, maePct, reason,
         heldHours: ((Date.now() - new Date(pos.timestamp).getTime()) / 3.6e6).toFixed(1)
     });
     if (state.history.length > 500) state.history.pop();
@@ -227,6 +231,14 @@ function getState() {
         history: state.history.slice(0, 40),
         snapshots: state.snapshots.slice(-300),
         stats: state.stats,
+        // Venue KPI (2026-07 forensics): the venue is profitable iff it lands
+        // roughly one tail winner (>=+10%) per ~3 stop-outs. Track that ratio
+        // directly instead of judging by equity.
+        kpi: (() => {
+            const tailWins = state.history.filter(h => h.pnlPercent >= 10).length;
+            const slHits = state.history.filter(h => /SL hit/i.test(h.reason || '')).length;
+            return { tailWins, slHits, ratio: slHits > 0 ? (tailWins / slHits).toFixed(2) : null, breakeven: '~0.33' };
+        })(),
         tokens: FUTURES_TOKENS.map(t => t.symbol)
     };
 }

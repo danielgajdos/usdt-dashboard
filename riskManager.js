@@ -189,6 +189,10 @@ function shouldExit(position, currentPrice, indicators) {
     // Track the high-water mark (self-contained so BOTH the DEX bot and the
     // futures shadow venue get trailing without extra wiring).
     if (currentPrice > (position.highWaterMark || 0)) position.highWaterMark = currentPrice;
+    // Low-water mark (MAE tracking). Forensics 2026-07: 42% of entries went
+    // straight to SL — MFE/MAE per trade tells us whether losers ever went
+    // positive first (entry-timing problem) or never did (signal problem).
+    if (!position.lowWaterMark || currentPrice < position.lowWaterMark) position.lowWaterMark = currentPrice;
 
     // 2. Profit exit — strategy-aware.
     if (position.strategy === 'MOMENTUM') {

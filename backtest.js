@@ -43,11 +43,22 @@ const STRATEGY  = arg('strategy', null);
 const SIZE_EUR  = parseFloat(arg('size', '100'));
 const VERBOSE   = args.includes('--verbose');
 
+// --universe futures replays the Binance Futures shadow venue's token list
+// (futuresTokens.js) with perp-appropriate costs, giving that venue the same
+// matched-window validation the DEX universe has.
+const UNIVERSE = arg('universe', 'dex');
+const { FUTURES_TOKENS } = require('./futuresTokens');
+const universeTokens = UNIVERSE === 'futures' ? FUTURES_TOKENS : TOKENS;
+const universeBySymbol = UNIVERSE === 'futures'
+    ? Object.fromEntries(FUTURES_TOKENS.map(t => [t.symbol.toUpperCase(), t]))
+    : BY_SYMBOL;
+if (UNIVERSE === 'futures') console.log('Universe: FUTURES shadow venue (perp cost model)');
+
 const SKIP_SYM = arg('skip', null); // comma-separated list of symbols to exclude
 const skipSet = new Set((SKIP_SYM || '').split(',').filter(Boolean).map(s => s.toUpperCase()));
 const tokensToTest = TOKEN_SYM
-    ? [BY_SYMBOL[TOKEN_SYM.toUpperCase()]].filter(Boolean)
-    : TOKENS.filter(t => t.binanceSymbol && !skipSet.has(t.symbol.toUpperCase()));
+    ? [universeBySymbol[TOKEN_SYM.toUpperCase()]].filter(Boolean)
+    : universeTokens.filter(t => t.binanceSymbol && !skipSet.has(t.symbol.toUpperCase()));
 if (!tokensToTest.length) { console.error('Unknown or untradeable token'); process.exit(1); }
 if (skipSet.size) console.log(`Skipping tokens: ${[...skipSet].join(',')}`);
 
@@ -113,11 +124,15 @@ function makePortfolio(initialCashEur) {
 // --- Realistic cost model — matches live execution ---
 // --slippage X overrides the per-side slippage % (default from config 0.10).
 // Use it to validate thin-pool tokens (e.g. FIL) at honest friction.
-const SWAP_FEE = config.COSTS.SWAP_FEE_PCT / 100;
-const SLIP     = (arg('slippage', null) !== null
-    ? parseFloat(arg('slippage', '0.1'))
-    : config.COSTS.EXPECTED_SLIPPAGE_PCT) / 100;
-const GAS_USD  = config.COSTS.GAS_PER_TX_USD;
+// Futures universe: perp cost model (taker fee ~0.05%/side + ~0.02% slip, no gas
+// ≈ 0.14% round-trip — matches futures.js PERP_RT_COST). DEX universe: on-chain costs.
+const SWAP_FEE = UNIVERSE === 'futures' ? 0.0005 : config.COSTS.SWAP_FEE_PCT / 100;
+const SLIP     = UNIVERSE === 'futures'
+    ? 0.0002
+    : (arg('slippage', null) !== null
+        ? parseFloat(arg('slippage', '0.1'))
+        : config.COSTS.EXPECTED_SLIPPAGE_PCT) / 100;
+const GAS_USD  = UNIVERSE === 'futures' ? 0 : config.COSTS.GAS_PER_TX_USD;
 
 function simBuy(price, sizeEur) {
     // amount in USDT → swap → tokens.  Slippage and fee eat the output.
@@ -211,7 +226,17 @@ async function runBacktest(token) {
             portfolio: { getOpenPositions: port.getOpenPositions, getPortfolio: port.getPortfolio },
             log: () => {}, signer: null, provider: null
         };
-        const decisions = await signalEngine.scan(ctx);
+        // Futures universe: mirror the live venue exactly — futures.js calls
+        // momentum.evaluateToken(token) directly (long-only momentum, no other
+        // strategies), because its synthetic addresses aren't in tokens.js and
+        // signalEngine.scan would never see them.
+        let decisions;
+        if (UNIVERSE === 'futures') {
+            const d = momentum.evaluateToken({ address: token.address, symbol: token.symbol, binanceSymbol: token.binanceSymbol });
+            decisions = d ? [d] : [];
+        } else {
+            decisions = await signalEngine.scan(ctx);
+        }
         decisionsGenerated += decisions.length;
 
         // Sentiment gate (mirror of production logic in index.js)

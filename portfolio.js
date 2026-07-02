@@ -182,6 +182,13 @@ const portfolio = {
         const pnl = netProceeds - pos.initialInvestment;
         const pnlPercent = (pnl / pos.initialInvestment) * 100;
 
+        // MFE/MAE: peak favorable / adverse excursion over the hold, from the
+        // high/low water marks maintained by riskManager.shouldExit each tick.
+        const mfePct = (pos.highWaterMark && pos.entryPrice)
+            ? ((pos.highWaterMark - pos.entryPrice) / pos.entryPrice) * 100 : null;
+        const maePct = (pos.lowWaterMark && pos.entryPrice)
+            ? ((pos.lowWaterMark - pos.entryPrice) / pos.entryPrice) * 100 : null;
+
         state.history.unshift({
             token: pos.token,
             symbol: pos.symbol,
@@ -194,6 +201,8 @@ const portfolio = {
             exitPrice: pos.amountTokens ? exitValueEur / pos.amountTokens : null,
             pnl,
             pnlPercent,
+            mfePct,
+            maePct,
             result: pnl > 0 ? 'WIN' : 'LOSS',
             reason,
             entryTxHash: pos.entryTxHash,
