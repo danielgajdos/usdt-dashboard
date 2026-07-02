@@ -173,6 +173,11 @@ async function evaluate(ctx) {
     for (const token of TOKENS) {
         // Don't stack entries on tokens already held
         if (openTokens.has(token.address.toLowerCase())) continue;
+        // 2026-07-02 volatility gate: majors (ETH/BTCB) are excluded from the
+        // momentum book — they can't deliver the ≥3× payoff the trailing exit
+        // needs within 72h (backtest: +€6 in trend regime AND 80% loss reduction
+        // in chop). They remain available to MEAN_REVERSION.
+        if (token.momentumEnabled === false) continue;
         const d = evaluateToken(token);
         if (d) decisions.push(d);
     }

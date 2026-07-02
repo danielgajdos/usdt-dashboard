@@ -32,7 +32,14 @@ const ALL_TOKENS = [
     },
     {
         // Binance-Peg Ethereum Token — deep ETH/USDT V2 pool, mirrors ETHUSDT
+        // 2026-07-02 momentumEnabled:false — forensics of the live ledger showed
+        // majors physically can't deliver the ≥3× payoff the trailing-exit
+        // structure needs (+6% in 72h to even activate the trail): same ~-5%
+        // SL downside as alts, upside capped ~+1.4%. Backtest confirms across
+        // BOTH regimes: 180d momentum +€64.55→+€70.50 and 90d chop −€7.46→−€1.52
+        // when ETH+BTCB are excluded from momentum. Still traded by MEAN_REVERSION.
         symbol: 'ETH',
+        momentumEnabled: false,
         address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8',
         decimals: 18,
         minLiquidityUsd: 10_000_000,
@@ -41,7 +48,9 @@ const ALL_TOKENS = [
     },
     {
         // Binance-Peg BTC Token (BTCB) — the canonical wrapped BTC on BSC
+        // 2026-07-02 momentumEnabled:false — see ETH note above (same rationale).
         symbol: 'BTCB',
+        momentumEnabled: false,
         address: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c',
         decimals: 18,
         minLiquidityUsd: 10_000_000,
